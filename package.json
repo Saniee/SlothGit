@@ -4,6 +4,7 @@
   "description": "Lazygit-inspired power tools for VS Code's built-in Git: rewrite history from a commit list, amend older commits, manage stashes, browse the reflog.",
   "version": "0.0.1",
   "publisher": "codegit",
+  "icon": "media/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/Saniee/CodeGit.git"
