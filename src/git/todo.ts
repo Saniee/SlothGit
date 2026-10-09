@@ -1,4 +1,8 @@
 // Pure rewriting of git's interactive rebase todo list. Used by rebaseEditor.ts, which git runs as GIT_SEQUENCE_EDITOR.
+//
+// With --rebase-merges the list also has `label`, `reset` and `merge` lines that rebuild the branch structure.
+// Those are never changed here, and changes that would cross them (squashing into another branch's commit,
+// moving a commit past a merge or a branch point) are refused, which makes git abort the rebase.
 
 export type TodoAction = 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
 
@@ -14,6 +18,10 @@ export interface RebasePlan {
 }
 
 const COMMIT_LINE = /^(pick|p|reword|r|edit|e|squash|s|fixup|f|drop|d)(\s+)([0-9a-fA-F]{4,64})\b(.*)$/;
+/** `merge [-C <sha> | -c <sha>] <label> [# <subject>]` */
+const MERGE_LINE = /^(?:merge|m)\s+(?:-[cC]\s+([0-9a-fA-F]{4,64})\s+)?(\S+)(.*)$/;
+/** Lines that rebuild the branch structure; HEAD jumps at them, so commits can't be squashed or moved across. */
+const STRUCTURE_LINE = /^(label|l|reset|t|merge|m)\s/;
 
 interface CommitLine {
   sha: string;
@@ -26,18 +34,24 @@ const ACTION_NAMES: Record<string, TodoAction> = {
 };
 
 export interface TodoEntry {
-  action: TodoAction;
-  /** Abbreviated SHA as written in the todo list. */
+  /** 'merge' steps recreate a merge commit; they are shown but can't be changed. */
+  action: TodoAction | 'merge';
+  /** Abbreviated SHA as written in the todo list; for a merge, the original merge commit's (may be empty). */
   sha: string;
   subject: string;
 }
 
-/** Commit lines of a rebase todo list, in file order (the next one to apply first). */
+/** "rest" is " <subject>" or " # <subject>" depending on git version. */
+const subjectOf = (rest: string) => rest.replace(/^\s*(#\s*)?/, '');
+
+/** Commit and merge lines of a rebase todo list, in file order (the next one to apply first). */
 export function parseTodo(todo: string): TodoEntry[] {
-  return todo.split(/\r?\n/).flatMap((line) => {
+  return todo.split(/\r?\n/).flatMap((line): TodoEntry[] => {
     const m = COMMIT_LINE.exec(line);
-    // "rest" is " <subject>" or " # <subject>" depending on git version.
-    return m ? [{ action: ACTION_NAMES[m[1]], sha: m[3].toLowerCase(), subject: m[4].replace(/^\s*(#\s*)?/, '') }] : [];
+    if (m) return [{ action: ACTION_NAMES[m[1]], sha: m[3].toLowerCase(), subject: subjectOf(m[4]) }];
+    const merge = MERGE_LINE.exec(line);
+    if (merge) return [{ action: 'merge', sha: merge[1]?.toLowerCase() ?? '', subject: subjectOf(merge[3]) || `Merge ${merge[2]}` }];
+    return [];
   });
 }
 
@@ -60,22 +74,36 @@ export function transformTodo(todo: string, plan: RebasePlan): string {
   const eol = todo.includes('\r\n') ? '\r\n' : '\n';
   const lines = todo.split(/\r?\n/);
   const parsed = new Map<number, CommitLine>();
+  const merges: string[] = [];
   lines.forEach((line, i) => {
     const m = COMMIT_LINE.exec(line);
     if (m) parsed.set(i, { sha: m[3].toLowerCase(), rest: m[4] });
+    const merge = MERGE_LINE.exec(line);
+    if (merge?.[1]) merges.push(merge[1].toLowerCase());
   });
   const commitIndexes = [...parsed.keys()];
 
   const find = (fullSha: string): number => {
     const full = fullSha.toLowerCase();
     const index = commitIndexes.find((i) => full.startsWith(parsed.get(i)!.sha));
-    if (index === undefined) throw new Error(`commit ${fullSha.slice(0, 10)} is not in the rebase todo list`);
-    return index;
+    if (index !== undefined) return index;
+    if (merges.some((sha) => full.startsWith(sha))) throw new Error(`${fullSha.slice(0, 10)} is a merge commit, which can't be changed here`);
+    throw new Error(`commit ${fullSha.slice(0, 10)} is not in the rebase todo list`);
   };
   const render = (i: number, action: TodoAction) => `${action} ${parsed.get(i)!.sha}${parsed.get(i)!.rest}`;
+  /** True when a label, reset or merge line lies strictly between lines a and b. */
+  const structureBetween = (a: number, b: number) =>
+    lines.slice(Math.min(a, b) + 1, Math.max(a, b)).some((line) => STRUCTURE_LINE.test(line));
 
   for (const [sha, action] of Object.entries(plan.actions ?? {})) {
     const i = find(sha);
+    if (action === 'squash' || action === 'fixup') {
+      // The commit is melded into whatever was applied just before it, which must be its parent on the same branch.
+      const previous = commitIndexes[commitIndexes.indexOf(i) - 1];
+      if (previous === undefined || structureBetween(previous, i)) {
+        throw new Error(`cannot ${action} ${sha.slice(0, 10)}: the commit before it is on another branch or is a merge`);
+      }
+    }
     lines[i] = render(i, action);
   }
 
@@ -84,6 +112,9 @@ export function transformTodo(todo: string, plan: RebasePlan): string {
     const position = commitIndexes.indexOf(i);
     const other = commitIndexes[plan.move.direction === 'up' ? position + 1 : position - 1];
     if (other === undefined) throw new Error(`cannot move commit ${plan.move.sha.slice(0, 10)} ${plan.move.direction}`);
+    if (structureBetween(i, other)) {
+      throw new Error(`cannot move commit ${plan.move.sha.slice(0, 10)} ${plan.move.direction} past a merge or branch point`);
+    }
     [lines[i], lines[other]] = [lines[other], lines[i]];
   }
 
@@ -92,6 +123,7 @@ export function transformTodo(todo: string, plan: RebasePlan): string {
     const target = find(plan.fixupInto.target);
     const line = render(i, 'fixup');
     lines.splice(i, 1);
+    // Directly after the target, before any label that marks it as a branch point.
     lines.splice(i < target ? target : target + 1, 0, line);
   }
 

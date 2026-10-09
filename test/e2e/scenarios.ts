@@ -551,11 +551,24 @@ scenario('commit: the pushed-commit warning can be turned off', async (t) => {
   }
 });
 
-scenario('commit: rewriting across a merge commit refuses', async (t) => {
+scenario('commit: rewriting below a merge commit keeps the merge', async (t) => {
+  await t.checkout('feature/with-merge');
+  await t.run('codegit.commit.reword', [await t.commit('Side work')], [input('Side work, reworded')]);
+  assert.deepEqual(t.sh('log', '--first-parent', '--format=%s', '-3').split('\n'), [
+    'After merge',
+    "Merge branch 'feature/merged-in' into feature/with-merge",
+    'Side work, reworded',
+  ]);
+  assert.equal(t.sh('log', '-1', '--format=%s', 'HEAD^^2'), 'Merged-in work');
+});
+
+scenario('commit: a merge commit itself cannot be changed', async (t) => {
   await t.checkout('feature/with-merge');
   const before = t.rev('HEAD');
-  await t.run('codegit.commit.reword', [await t.commit('Side work')], [input('Side work, reworded')]);
-  assert.ok(t.saw('warning', /merge commits/));
+  const merge = (await t.commits()).find((c) => c.parents.length === 2);
+  assert.ok(merge);
+  await t.run('codegit.commit.drop', [merge], [button('Continue', /Drop 1 commit/)]);
+  assert.ok(t.saw('warning', /merge commit itself/));
   assert.equal(t.rev('HEAD'), before);
 });
 

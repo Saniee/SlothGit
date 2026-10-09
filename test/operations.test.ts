@@ -171,18 +171,83 @@ test('conflicting rebase stops and can be aborted', async () => {
   assert.equal(r.sh('rev-parse', 'HEAD'), before);
 });
 
-test('refuses to rewrite across merge commits', async () => {
+// --- history with a merge ------------------------------------------------------------
+//
+//   c1 - c2 - m1 ---- merge - c3     (main)
+//          \         /
+//           s1 - s2                  (side)
+function setupMerge() {
   const r = setup(2);
+  const commit = (file: string, subject: string) => {
+    r.write(file, `${subject}\n`);
+    r.sh('add', '.');
+    r.sh('commit', '-q', '-m', subject);
+  };
   r.sh('checkout', '-q', '-b', 'side');
-  r.write('side.txt', 'side\n');
-  r.sh('add', '.');
-  r.sh('commit', '-q', '-m', 'side');
+  commit('s1.txt', 's1');
+  commit('s2.txt', 's2');
   r.sh('checkout', '-q', 'main');
-  r.write('main.txt', 'main\n');
-  r.sh('add', '.');
-  r.sh('commit', '-q', '-m', 'main');
+  commit('m1.txt', 'm1');
   r.sh('merge', '-q', '--no-ff', '-m', 'merge', 'side');
-  await assert.rejects(r.ops.drop([r.sha('c2')]), /merge commits/);
+  commit('c3.txt', 'c3');
+  const mainline = () => r.sh('log', '--first-parent', '--format=%s').split('\n');
+  const sideline = () => r.sh('log', '--format=%s', 'HEAD^^2', '--not', 'HEAD^^1').split('\n');
+  const merges = () => r.sh('rev-list', '--merges', '--count', 'HEAD');
+  return { ...r, mainline, sideline, merges };
+}
+
+test('rewrites below a merge keep the merge', async () => {
+  const r = setupMerge();
+  await r.ops.reword(r.sha('c2'), 'c2 reworded');
+  assert.deepEqual(r.mainline(), ['c3', 'merge', 'm1', 'c2 reworded', 'c1']);
+  assert.deepEqual(r.sideline(), ['s2', 's1']);
+  assert.equal(r.merges(), '1');
+  assert.equal(r.sh('merge-base', 'HEAD^^1', 'HEAD^^2'), r.sha('c2 reworded'), 'both branches build on the new c2');
+});
+
+test('drop, squash and amend commits on the merged branch', async () => {
+  const r = setupMerge();
+  await r.ops.drop([r.sha('s1')]);
+  assert.deepEqual(r.sideline(), ['s2']);
+  assert.equal(fs.existsSync(path.join(r.dir, 's1.txt')), false);
+
+  const s = setupMerge();
+  await s.ops.squash([s.sha('s2')], 'fixup');
+  assert.deepEqual(s.sideline(), ['s1']);
+  assert.equal(s.read('s2.txt'), 's2\n');
+  assert.equal(s.merges(), '1');
+
+  const a = setupMerge();
+  a.write('s1.txt', 'amended\n');
+  a.sh('add', 's1.txt');
+  await a.ops.amendStaged(a.sha('s1'));
+  assert.deepEqual(a.sideline(), ['s2', 's1']);
+  assert.equal(a.sh('show', `${a.sha('s1')}:s1.txt`), 'amended');
+  assert.equal(a.read('s1.txt'), 'amended\n');
+
+  const e = setupMerge();
+  await e.ops.setAuthor(e.sha('s2'), 'Other <other@example.com>');
+  assert.equal(e.sh('log', '-1', '--format=%an', e.sha('s2')), 'Other');
+  assert.equal(e.merges(), '1');
+});
+
+test('changes that would break the branch structure are refused, leaving history alone', async () => {
+  const r = setupMerge();
+  const head = r.sh('rev-parse', 'HEAD');
+  // s1's previous commit in the todo list is on main: squashing would meld it into the wrong branch.
+  await assert.rejects(r.ops.squash([r.sha('s1')], 'squash'), /another branch|merge/);
+  await assert.rejects(r.ops.squash([r.sha('c3')], 'squash'), /merge commit/);
+  await assert.rejects(r.ops.drop([r.sha('merge')]), /merge commit itself/);
+  await assert.rejects(r.ops.reword(r.sha('merge'), 'x'), /merge commit itself/);
+  await assert.rejects(r.ops.move(r.sha('m1'), 'up'), /past a merge|branch point/);
+  assert.equal(await getOperation(r.git), undefined);
+  assert.equal(r.sh('rev-parse', 'HEAD'), head);
+
+  // The newest commit can still be amended when it is the merge.
+  r.sh('reset', '-q', '--hard', 'HEAD~1');
+  await r.ops.reword(r.sha('merge'), 'merge reworded');
+  assert.equal(r.subjects()[0], 'merge reworded');
+  assert.equal(r.merges(), '1');
 });
 
 test('stash push, list files, rename, pop', async () => {

@@ -57,6 +57,8 @@ Rewrite history straight from the commit list, with no todo file to edit by hand
 
 Expand a commit to see its files. For each file you can open the diff or the file at that revision, or check the file out from that commit. You can also **remove its changes from the commit**, or **move them out of the commit into the index**, which is lazygit's custom-patch "move patch out" at file level. Use **Open All Changes** to see a whole commit in the multi-diff editor.
 
+**Merge commits:** rewrites work across merges. When the commits being rewritten include merges, CodeGit rebases with `--rebase-merges`, so the merges are recreated and the branch structure stays the same. A recreated merge is merged again, so conflicts that were resolved in it come back, and changes made by hand in the merge itself are lost. Changes that would break the structure are refused before anything happens: squashing a commit into one on another branch, or moving a commit past a merge. A merge commit itself can't be dropped, reworded or edited yet, except the newest commit, which can be amended. During a paused rebase, merge steps are listed with the other steps but can't be changed.
+
 Commit icons are green when the commit is already on the upstream branch and yellow when it isn't. CodeGit asks for confirmation before rewriting pushed commits.
 
 All rewrites use `git rebase --interactive --autostash`, so a dirty working tree is fine. When a rebase stops (on conflicts, or at a commit you chose to edit), the status bar and the view toolbar offer **Continue / Skip / Abort**. The remaining rebase steps appear at the top of the Commits view, where you can reorder them or change their action (pick, reword, squash, fixup, edit, drop) before continuing. Reword asks for the new message right away and applies it when the rebase gets to that commit.
@@ -117,6 +119,5 @@ The tag must match `version` in `package.json`. Tags with a suffix, such as `v0.
 ## Roadmap ideas
 
 - Line/hunk-level custom patches from old commits (file level is done)
-- Rewriting history that contains merge commits (`--rebase-merges`)
 - Submodules
 - Custom commands (lazygit's `customCommands`)

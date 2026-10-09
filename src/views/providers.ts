@@ -12,7 +12,7 @@ import {
   notOnHead,
   type BisectState,
 } from '../git/queries';
-import type { TodoAction } from '../git/todo';
+import type { TodoEntry } from '../git/todo';
 import type { Git } from '../git/runner';
 import type { RepoManager } from '../repoManager';
 import { BaseProvider } from './baseProvider';
@@ -43,13 +43,14 @@ export async function commitFiles(git: Git, node: CommitNode): Promise<FileNode[
   return pairs.map((pair) => ({ kind: 'file', pair, label: node.shortSha, commit: node }));
 }
 
-const TODO_ICONS: Record<TodoAction, string> = {
+const TODO_ICONS: Record<TodoEntry['action'], string> = {
   pick: 'circle-large-outline',
   reword: 'edit',
   edit: 'debug-pause',
   squash: 'fold-up',
   fixup: 'fold-up',
   drop: 'trash',
+  merge: 'git-merge',
 };
 
 export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
@@ -195,12 +196,14 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
 
   private todoItem(node: TodoNode): vscode.TreeItem {
     const item = new vscode.TreeItem(node.subject, vscode.TreeItemCollapsibleState.None);
-    item.id = `todo:${node.sha}`;
+    // A merge step without -C has no SHA; leave its id to VS Code.
+    if (node.sha) item.id = `todo:${node.sha}`;
     item.description = `${node.action} · ${node.sha}`;
     item.tooltip = `Pending rebase step: ${node.action} ${node.sha}\n${node.subject}`;
     const color = node.action === 'drop' ? 'disabledForeground' : 'charts.orange';
     item.iconPath = new vscode.ThemeIcon(TODO_ICONS[node.action], new vscode.ThemeColor(color));
-    item.contextValue = 'todo';
+    // Merge steps recreate a merge commit and can't be changed or moved.
+    item.contextValue = node.action === 'merge' ? 'todo:merge' : 'todo';
     return item;
   }
 

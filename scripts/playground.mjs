@@ -136,7 +136,7 @@ commit('Add filters', { 'filters.txt': 'filters\n' });
 commit('', { 'search.txt': 'search box\nfixed typo\n' }, { extra: [`--fixup=${search}`] });
 commit('Add sorting', { 'sorting.txt': 'sorting\n' });
 
-// Contains a merge commit: history rewrites across it should refuse cleanly.
+// Contains a merge commit: rewrites below it recreate the merge; the merge itself can't be changed (except at HEAD).
 g('switch', '-q', '-c', 'feature/with-merge', v1);
 commit('Side work', { 'side.txt': 'side\n' });
 g('switch', '-q', '-c', 'feature/merged-in', v1);

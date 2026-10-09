@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { transformTodo } from '../src/git/todo';
+import { parseTodo, transformTodo } from '../src/git/todo';
 
 const A = 'aaaaaaa1111111111111111111111111111111111';
 const B = 'bbbbbbb2222222222222222222222222222222222';
@@ -38,6 +38,46 @@ test('leaves non-commit lines alone', () => {
   const withRefs = 'pick aaaaaaa first\nupdate-ref refs/heads/x\npick bbbbbbb second\n';
   const out = transformTodo(withRefs, { actions: { [B]: 'squash' } });
   assert.equal(out, 'pick aaaaaaa first\nupdate-ref refs/heads/x\nsquash bbbbbbb second\n');
+});
+
+// A --rebase-merges todo list for: main c1 - [side s1 - s2] merged - c3.
+const M = 'eeeeeee5555555555555555555555555555555555';
+const S1 = 'aaaaaaa1111111111111111111111111111111111';
+const S2 = 'bbbbbbb2222222222222222222222222222222222';
+const C3 = 'ccccccc3333333333333333333333333333333333';
+const merges = [
+  'label onto',
+  '',
+  '# Branch: side',
+  'reset onto',
+  'pick aaaaaaa s1',
+  'pick bbbbbbb s2',
+  'label side',
+  '',
+  'reset onto',
+  'merge -C eeeeeee side # Merge branch side',
+  'pick ccccccc c3',
+  '',
+].join('\n');
+
+test('parses merge steps', () => {
+  assert.deepEqual(parseTodo(merges), [
+    { action: 'pick', sha: 'aaaaaaa', subject: 's1' },
+    { action: 'pick', sha: 'bbbbbbb', subject: 's2' },
+    { action: 'merge', sha: 'eeeeeee', subject: 'Merge branch side' },
+    { action: 'pick', sha: 'ccccccc', subject: 'c3' },
+  ]);
+  assert.deepEqual(parseTodo('merge other\n'), [{ action: 'merge', sha: '', subject: 'Merge other' }]);
+});
+
+test('with merges: changes within a branch work, changes across the structure are refused', () => {
+  assert.match(transformTodo(merges, { actions: { [S2]: 'fixup', [S1]: 'reword' } }), /reword aaaaaaa s1\nfixup bbbbbbb s2\nlabel side/);
+  assert.match(transformTodo(merges, { move: { sha: S1, direction: 'up' } }), /pick bbbbbbb s2\npick aaaaaaa s1\nlabel side/);
+  assert.throws(() => transformTodo(merges, { actions: { [S1]: 'squash' } }), /another branch or is a merge/);
+  assert.throws(() => transformTodo(merges, { actions: { [C3]: 'fixup' } }), /another branch or is a merge/);
+  assert.throws(() => transformTodo(merges, { move: { sha: S2, direction: 'up' } }), /past a merge or branch point/);
+  assert.throws(() => transformTodo(merges, { move: { sha: C3, direction: 'down' } }), /past a merge or branch point/);
+  assert.throws(() => transformTodo(merges, { actions: { [M]: 'drop' } }), /is a merge commit/);
 });
 
 test('pauses before the first step', () => {

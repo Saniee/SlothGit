@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { LocalBranch, RefPair, Remote, RemoteBranch, Stash, Tag, Worktree } from '../git/queries';
-import type { TodoAction } from '../git/todo';
+import type { TodoEntry } from '../git/todo';
 
 export interface CommitNode {
   kind: 'commit';
@@ -43,7 +43,7 @@ export interface FileNode {
 /** A remaining step of a paused interactive rebase, shown at the top of the Commits view. */
 export interface TodoNode {
   kind: 'todo';
-  action: TodoAction;
+  action: TodoEntry['action'];
   /** Abbreviated SHA as written in the todo list. */
   sha: string;
   subject: string;

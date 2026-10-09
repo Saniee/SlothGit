@@ -62,20 +62,38 @@ export class GitOps {
     return (await this.git.run(['merge-base', '--octopus', ...shas])).trim();
   }
 
-  private async assertNoMerges(base: string): Promise<void> {
+  private async hasMerges(base: string): Promise<boolean> {
     const range = base === ROOT ? 'HEAD' : `${base}..HEAD`;
-    const count = parseInt(await this.git.run(['rev-list', '--merges', '--count', range]), 10);
-    if (count > 0) {
-      throw new UserError('The commits to rewrite include merge commits. CodeGit does not rewrite across merges yet.');
+    return parseInt(await this.git.run(['rev-list', '--merges', '--count', range]), 10) > 0;
+  }
+
+  /** Merge commits are recreated by the rebase, but can't be the target of a change themselves. */
+  private async assertNotMerges(shas: string[]): Promise<void> {
+    if (!shas.length) return;
+    const merges = (await this.git.run(['rev-list', '--no-walk', '--merges', ...shas])).trim();
+    if (merges) {
+      throw new UserError(
+        "CodeGit can't change a merge commit itself yet (only the newest commit, by amending it). Commits before and after merges can be rewritten.",
+      );
     }
   }
 
+  /**
+   * Runs `git rebase --interactive` with `plan` applied to the todo list. When the commits to rewrite include
+   * merges, --rebase-merges recreates them; merges whose parents changed are merged again, so conflicts
+   * resolved in them come back.
+   */
   private async rebase(
     base: string,
     plan: RebasePlan,
     options: { message?: string; autosquash?: boolean; onto?: string } = {},
   ): Promise<void> {
-    await this.assertNoMerges(base);
+    await this.assertNotMerges([
+      ...Object.keys(plan.actions ?? {}),
+      ...(plan.move ? [plan.move.sha] : []),
+      ...(plan.fixupInto ? [plan.fixupInto.target] : []),
+    ]);
+    const merges = (await this.hasMerges(base)) ? ['--rebase-merges'] : [];
     const env: Record<string, string> = {
       GIT_SEQUENCE_EDITOR: this.editorCommand,
       GIT_EDITOR: this.editorCommand,
@@ -84,7 +102,7 @@ export class GitOps {
     if (options.message !== undefined) env.CODEGIT_COMMIT_MESSAGE = options.message;
     const autosquash = options.autosquash ? '--autosquash' : '--no-autosquash';
     const range = options.onto ? ['--onto', options.onto, base] : [base];
-    await this.git.exec(['rebase', '--interactive', '--autostash', autosquash, ...range], { env });
+    await this.git.exec(['rebase', '--interactive', '--autostash', autosquash, ...merges, ...range], { env });
   }
 
   /**
@@ -128,6 +146,10 @@ export class GitOps {
   async squash(shas: string[], action: 'squash' | 'fixup'): Promise<void> {
     const oldest = await this.oldest(shas);
     if (!(await this.hasParent(oldest))) throw new UserError('The first commit has no previous commit to squash into.');
+    const parents = (await this.git.run(['rev-parse', ...shas.map((sha) => `${sha}^`)])).split(/\s+/).filter(Boolean);
+    if ((await this.git.run(['rev-list', '--no-walk', '--merges', ...parents])).trim()) {
+      throw new UserError("The commit before it is a merge commit, which can't be squashed into.");
+    }
     const base = await this.ancestor(oldest, 2);
     await this.rebase(base, { actions: GitOps.actions(shas, action) });
   }
@@ -162,7 +184,7 @@ export class GitOps {
       return;
     }
     const base = await this.ancestor(sha, 1);
-    await this.assertNoMerges(base);
+    await this.assertNotMerges([sha]);
     // Temporary commit; it is folded into the target and its message discarded, so skip hooks.
     await this.git.exec(['commit', '--no-verify', '-m', `codegit: amend ${sha}`]);
     const temp = await headSha(this.git);
