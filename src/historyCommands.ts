@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as vscode from 'vscode';
 import { fromGraph } from './views/graphPanel';
 import { openMultiDiff } from './commands';
-import { getCommitFiles, getOperation, rebaseTodoPath } from './git/queries';
+import { getCommitFiles, getCommitMessage, getOperation, rebaseTodoPath } from './git/queries';
 import { transformTodo, type TodoAction } from './git/todo';
 import type { UndoAction } from './git/undo';
 import type { RepoManager } from './repoManager';
@@ -110,6 +110,21 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
     await deps.refreshAll(true);
   }
 
+  /** Asks for the step's new subject (the body is kept), like the Commits view's quick Reword. */
+  async function rewordTodo(node: TodoNode): Promise<void> {
+    const git = repos.git();
+    if (!git) return;
+    const [subject, ...body] = (await getCommitMessage(git, node.sha)).split('\n');
+    const newSubject = await vscode.window.showInputBox({
+      title: `Reword ${node.sha} when the rebase gets to it`,
+      value: subject,
+      prompt: body.length ? 'The commit body is kept as is.' : undefined,
+      validateInput: (v) => (v.trim() ? undefined : 'The message cannot be empty.'),
+    });
+    if (newSubject === undefined) return;
+    await run('Updating rebase step…', (ops) => ops.rewordTodo(node.sha, [newSubject, ...body].join('\n')));
+  }
+
   // --- commands ------------------------------------------------------------------------
 
   const commands: Record<string, (...args: any[]) => unknown> = {
@@ -215,6 +230,7 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
       if (!node) return;
       const actions: { label: TodoAction; description: string }[] = [
         { label: 'pick', description: 'Keep the commit' },
+        { label: 'reword', description: 'Keep the commit, with a new message' },
         { label: 'squash', description: 'Meld into the previous commit, combining messages' },
         { label: 'fixup', description: "Meld into the previous commit, keeping the previous commit's message" },
         { label: 'edit', description: 'Stop after applying it' },
@@ -224,7 +240,8 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
         actions.filter((a) => a.label !== node.action),
         { title: `Rebase step for ${node.sha}: ${node.subject}` },
       );
-      if (picked) await editTodo(node, (n) => ({ actions: { [n.sha]: picked.label } }));
+      if (picked?.label === 'reword') await rewordTodo(node);
+      else if (picked) await editTodo(node, (n) => ({ actions: { [n.sha]: picked.label } }));
     },
   };
 

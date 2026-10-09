@@ -6,8 +6,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
 import { buildEditorCommand, GitOps } from '../src/git/operations';
-import { getOperation, getStashes, getStashFiles } from '../src/git/queries';
+import { getOperation, getRebaseTodo, getStashes, getStashFiles } from '../src/git/queries';
 import { Git } from '../src/git/runner';
+import { pendingRewordMessage } from '../src/git/todo';
 
 const editorScript = path.resolve(__dirname, '../dist/rebaseEditor.js');
 
@@ -112,6 +113,47 @@ test('edit pauses the rebase until continued', async () => {
   assert.equal(await getOperation(r.git), undefined);
   assert.deepEqual(r.subjects(), ['c4', 'c3', 'c2', 'c1']);
   assert.equal(r.sh('show', `${r.sha('c2')}:f2.txt`), 'edited');
+});
+
+test('reword a pending step of a paused rebase', async () => {
+  const r = setup();
+  await r.ops.edit(r.sha('c2'));
+  const [c3, c4] = (await getRebaseTodo(r.git)).map((t) => t.sha);
+  await r.ops.rewordTodo(c3, 'c3 reworded\n\nwith a body');
+  assert.equal((await getRebaseTodo(r.git))[0].action, 'reword');
+  // Changing the message twice keeps the latest; other steps keep theirs.
+  await r.ops.rewordTodo(c3, 'c3 final');
+  await r.ops.continueOperation('rebase');
+  assert.equal(await getOperation(r.git), undefined);
+  assert.deepEqual(r.subjects(), ['c4', 'c3 final', 'c2', 'c1']);
+  assert.ok(c4);
+  await assert.rejects(r.ops.rewordTodo(c4, 'x'), /No interactive rebase/);
+});
+
+test('reword step that stops on a conflict gets its message after continuing', async () => {
+  const r = setup(3);
+  await r.ops.edit(r.sha('c1'));
+  const c2 = (await getRebaseTodo(r.git))[0].sha;
+  await r.ops.rewordTodo(c2, 'c2 reworded');
+  // Conflict with c2, which creates f2.txt.
+  r.write('f2.txt', 'conflict\n');
+  r.sh('add', 'f2.txt');
+  r.sh('commit', '-q', '--amend', '--no-edit');
+  await assert.rejects(r.ops.continueOperation('rebase'));
+  r.write('f2.txt', 'v2\n');
+  r.sh('add', 'f2.txt');
+  await r.ops.continueOperation('rebase');
+  assert.equal(await getOperation(r.git), undefined);
+  assert.deepEqual(r.subjects(), ['c3', 'c2 reworded', 'c1']);
+});
+
+test('pendingRewordMessage reads the current step from rebase-merge/done', () => {
+  const full = 'abc1234' + '0'.repeat(33);
+  const messages = { [full]: 'new message' };
+  assert.equal(pendingRewordMessage('pick 1111111 a\nreword abc1234 b\n', messages), 'new message');
+  assert.equal(pendingRewordMessage('reword abc1234 b\npick 1111111 a\n', messages), undefined, 'not the current step');
+  assert.equal(pendingRewordMessage('edit abc1234 b\n', messages), undefined, 'not a reword');
+  assert.equal(pendingRewordMessage('reword 9999999 b\n', messages), undefined, 'no saved message');
 });
 
 test('conflicting rebase stops and can be aborted', async () => {

@@ -5,6 +5,7 @@ import {
   getBisectState,
   getOperation,
   getReflog,
+  rebaseTodoPath,
   hasStagedChanges,
   headSha,
   isDirty,
@@ -12,7 +13,7 @@ import {
   type Operation,
 } from './queries';
 import { Git } from './runner';
-import type { RebasePlan, TodoAction } from './todo';
+import { REWORD_MESSAGES_FILE, transformTodo, type RebasePlan, type TodoAction } from './todo';
 import { planUndo, REDO_MARKER, UNDO_MARKER, type UndoAction, type UndoPlan } from './undo';
 
 const ROOT = '--root';
@@ -447,9 +448,31 @@ export class GitOps {
 
   // --- in-progress operations ----------------------------------------------
 
-  /** ':' tells git not to launch an editor and keep the prepared message. */
+  /**
+   * Sets a step of the paused rebase to reword. The message is saved next to the todo list and written by
+   * rebaseEditor.js when git reaches the step.
+   */
+  async rewordTodo(sha: string, message: string): Promise<void> {
+    const full = (await this.git.run(['rev-parse', '--verify', `${sha}^{commit}`])).trim();
+    const todoFile = await rebaseTodoPath(this.git);
+    if (!fs.existsSync(todoFile)) throw new UserError('No interactive rebase is paused.');
+    fs.writeFileSync(todoFile, transformTodo(fs.readFileSync(todoFile, 'utf8'), { actions: { [full]: 'reword' } }));
+    const savedFile = path.join(path.dirname(todoFile), REWORD_MESSAGES_FILE);
+    const saved = fs.existsSync(savedFile) ? (JSON.parse(fs.readFileSync(savedFile, 'utf8')) as Record<string, string>) : {};
+    saved[full] = message;
+    fs.writeFileSync(savedFile, JSON.stringify(saved));
+  }
+
+  /**
+   * Rebases run rebaseEditor.js, which applies saved reword messages and otherwise keeps git's prepared message.
+   * For the others ':' tells git not to launch an editor and keep the prepared message.
+   */
+  private continueEnv(operation: Operation): Record<string, string> {
+    return { GIT_EDITOR: operation === 'rebase' ? this.editorCommand : ':' };
+  }
+
   async continueOperation(operation: Operation): Promise<void> {
-    await this.git.exec([operation, '--continue'], { env: { GIT_EDITOR: ':' } });
+    await this.git.exec([operation, '--continue'], { env: this.continueEnv(operation) });
   }
 
   async abortOperation(operation: Operation): Promise<void> {
@@ -457,7 +480,7 @@ export class GitOps {
   }
 
   async skipOperation(operation: Operation): Promise<void> {
-    await this.git.exec([operation, '--skip'], { env: { GIT_EDITOR: ':' } });
+    await this.git.exec([operation, '--skip'], { env: this.continueEnv(operation) });
   }
 
   // --- stashes ---------------------------------------------------------------

@@ -34,7 +34,7 @@ Push, fetch and remote deletes go through VS Code's built-in Git extension, so i
 - **Whole branch:** right-click the target branch (e.g. `origin/main`) and pick **Rebase Current Branch onto This**.
 - **Only your commits** (your branch was cut from another feature branch): in the Commits view, right-click the last commit that is *not* yours and pick **Mark as Base Commit for Rebase**. Then run **Rebase Current Branch onto This** on the target and choose **Rebase from Marked Base**. This is `git rebase --onto <target> <base>`.
 
-- **Interactive:** pick **Interactive Rebase** (or **Interactive Rebase from Marked Base**). The rebase pauses before the first commit is applied and lists the steps at the top of the Commits view. Reorder them, or change each to pick, squash, fixup, edit or drop, then **Continue**. **Abort** leaves the branch as it was.
+- **Interactive:** pick **Interactive Rebase** (or **Interactive Rebase from Marked Base**). The rebase pauses before the first commit is applied and lists the steps at the top of the Commits view. Reorder them, or change each to pick, reword, squash, fixup, edit or drop, then **Continue**. **Abort** leaves the branch as it was.
 
 CodeGit warns before rebasing commits that are already pushed. Conflicts are handled the same way as for other rewrites (see below).
 
@@ -59,7 +59,7 @@ Expand a commit to see its files. For each file you can open the diff or the fil
 
 Commit icons are green when the commit is already on the upstream branch and yellow when it isn't. CodeGit asks for confirmation before rewriting pushed commits.
 
-All rewrites use `git rebase --interactive --autostash`, so a dirty working tree is fine. When a rebase stops (on conflicts, or at a commit you chose to edit), the status bar and the view toolbar offer **Continue / Skip / Abort**. The remaining rebase steps appear at the top of the Commits view, where you can reorder them or change their action (pick, squash, fixup, edit, drop) before continuing.
+All rewrites use `git rebase --interactive --autostash`, so a dirty working tree is fine. When a rebase stops (on conflicts, or at a commit you chose to edit), the status bar and the view toolbar offer **Continue / Skip / Abort**. The remaining rebase steps appear at the top of the Commits view, where you can reorder them or change their action (pick, reword, squash, fixup, edit, drop) before continuing. Reword asks for the new message right away and applies it when the rebase gets to that commit.
 
 Each commit shows its SHA, author initials and message, as in lazygit, followed by its relative date, branches and tags. In a narrow view only the end of the message is cut off; the tooltip has the full message, author, date and email. Merge commits get a merge icon.
 

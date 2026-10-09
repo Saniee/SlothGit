@@ -41,6 +41,21 @@ export function parseTodo(todo: string): TodoEntry[] {
   });
 }
 
+/** Kept next to git-rebase-todo, so git deletes it when the rebase ends: full SHA -> message for its reword step. */
+export const REWORD_MESSAGES_FILE = 'codegit-messages.json';
+
+/**
+ * The saved message for the step git is applying now, when that is a reword. `done` is rebase-merge/done,
+ * whose last commit line is the current step.
+ */
+export function pendingRewordMessage(done: string, messages: Record<string, string>): string | undefined {
+  const entries = parseTodo(done);
+  const current = entries[entries.length - 1];
+  if (current?.action !== 'reword') return undefined;
+  const sha = Object.keys(messages).find((full) => full.toLowerCase().startsWith(current.sha));
+  return sha === undefined ? undefined : messages[sha];
+}
+
 export function transformTodo(todo: string, plan: RebasePlan): string {
   const eol = todo.includes('\r\n') ? '\r\n' : '\n';
   const lines = todo.split(/\r?\n/);

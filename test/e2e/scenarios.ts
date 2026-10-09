@@ -848,6 +848,19 @@ scenario('rebase todo: change a step before continuing', async (t) => {
   assert.deepEqual(t.subjects(2), ['Fix typo in docs', 'Add settings page']);
 });
 
+scenario('rebase todo: reword a step before continuing', async (t) => {
+  await t.cleanTree();
+  await t.run('codegit.commit.edit', [await t.commit('Add settings page')]);
+  const step = (await t.todos()).find((n) => n.subject === 'Add profile page');
+  assert.ok(step);
+  await t.run('codegit.todo.setAction', [step], [pick('reword'), input('Add the profile page', /Reword/)]);
+  assert.equal((await t.todos()).find((n) => n.sha === step.sha)?.action, 'reword');
+  await t.run('codegit.operation.continue');
+  assert.ok(!t.operationInProgress());
+  assert.deepEqual(t.subjects(3), ['Add the profile page', 'Fix typo in docs', 'Add settings page']);
+  assert.ok(t.sh('log', '-1', '--format=%b', 'HEAD').trim().length > 0, 'the multi-line body is kept');
+});
+
 scenario('rebase todo: reorder steps', async (t) => {
   await t.checkout('feature/search');
   await t.run('codegit.commit.edit', [await t.commit('Add search')]);

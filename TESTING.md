@@ -69,7 +69,7 @@ Tick off what you tried and note anything odd, such as wrong labels, missing ref
 - [ ] All branches: other branches' commits are dimmed and can't be rewritten
 - [ ] Commit Graph: lanes for `feature/with-merge` and all branches, labels, search, details pane, file diffs, double-click, right-click actions
 - [ ] Commit Graph next to GitLens's graph: what's missing or worse?
-- [ ] During a paused rebase: todo list at the top; change actions / reorder; Continue / Skip / Abort
+- [ ] During a paused rebase: todo list at the top; change actions (including reword) / reorder; Continue / Skip / Abort
 - [ ] Bisect: bad / good / skip, marks shown, status bar, reset
 - [ ] Compare: select, compare with selected (commits, branches, tags mixed)
 - [ ] Undo / redo across: commit, amend, reset, rebase, checkout, merge
