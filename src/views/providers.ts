@@ -9,6 +9,7 @@ import {
   getStashes,
   getStashFiles,
   getUnpushed,
+  notOnHead,
   type BisectState,
 } from '../git/queries';
 import type { TodoAction } from '../git/todo';
@@ -43,6 +44,10 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
   baseSha: string | undefined;
   /** Repository-relative path the log is filtered to (lazygit's "filter by path"). */
   filterPath: string | undefined;
+  /** Text search over messages, authors and SHAs. */
+  search: string | undefined;
+  /** List every branch, remote branch and tag, not only HEAD. */
+  allBranches = false;
   /** Set while `git bisect` is running. */
   bisect: BisectState | undefined;
   private todoCount = 0;
@@ -69,12 +74,14 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
     this.bisect = bisect;
     void vscode.commands.executeCommand('setContext', 'codegit.bisecting', !!bisect);
     void vscode.commands.executeCommand('setContext', 'codegit.commitsFiltered', !!this.filterPath);
+    void vscode.commands.executeCommand('setContext', 'codegit.commitsSearching', !!this.search);
+    void vscode.commands.executeCommand('setContext', 'codegit.commitsAllBranches', this.allBranches);
 
     // While bisecting HEAD jumps around; keep showing the branch the bisect started from.
     const ref = bisect ? bisect.start : 'HEAD';
     const paths = this.filterPath ? [this.filterPath] : [];
     const [log, unpushed, head, todo] = await Promise.all([
-      getLog(git, config('commitLimit', 300), ref, paths),
+      getLog(git, config('commitLimit', 300), ref, paths, { all: this.allBranches, search: this.search }),
       getUnpushed(git),
       git.exec(['rev-parse', '-q', '--verify', 'HEAD'], { allowedExitCodes: [1, 128] }),
       operation === 'rebase' ? getRebaseTodo(git) : Promise.resolve([]),
@@ -85,13 +92,14 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
 
     // The todo list runs oldest first; show it newest first, above the commits.
     const todoNodes = todo.map((t): TodoNode => ({ kind: 'todo', ...t })).reverse();
-    const commits = log.map((c, index): CommitNode => ({ kind: 'commit', source: 'log', index, ...c }));
+    const others = this.allBranches ? await notOnHead(git, log.map((c) => c.sha)) : new Set<string>();
+    const commits = log.map((c, index): CommitNode => ({ kind: 'commit', source: 'log', index, ...c, onHead: !others.has(c.sha) }));
     return [...todoNodes, ...commits];
   }
 
   protected keyOf(roots: (CommitNode | TodoNode)[]): string {
     const unpushed = this.unpushed ? [...this.unpushed].join(',') : 'none';
-    const state = JSON.stringify([this.head, this.bisect, this.filterPath]);
+    const state = JSON.stringify([this.head, this.bisect, this.filterPath, this.search, this.allBranches]);
     const items = roots.map((n) => (n.kind === 'todo' ? `${n.action} ${n.sha}` : `${n.sha} ${n.refs?.join(',')}`));
     return `${unpushed}\n${state}\n${items.join('\n')}`;
   }
@@ -101,6 +109,8 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
       this.todoCount && `rebasing · ${this.todoCount} left`,
       this.bisect && 'bisecting',
       this.filterPath && `file: ${this.filterPath}`,
+      this.search && `search: ${this.search}`,
+      this.allBranches && 'all branches',
     ];
     return parts.filter(Boolean).join(' · ') || undefined;
   }
@@ -117,6 +127,7 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
     const copied = this.clipboard.has(node.sha);
     const isBase = node.sha === this.baseSha;
     const bisect = this.bisectMark(node.sha);
+    const merge = node.parents.length > 1;
     if (bisect) {
       item.iconPath = new vscode.ThemeIcon(bisect.icon, new vscode.ThemeColor(bisect.color));
       item.description = `${bisect.label} · ${item.description}`;
@@ -125,23 +136,35 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
       item.description = `base · ${item.description}`;
     } else if (copied) {
       item.iconPath = new vscode.ThemeIcon('clippy', new vscode.ThemeColor('charts.blue'));
+    } else if (node.onHead === false) {
+      // Another branch's commit (all-branches mode): not part of this branch's push state.
+      item.iconPath = new vscode.ThemeIcon(merge ? 'git-merge' : 'git-commit', new vscode.ThemeColor('disabledForeground'));
     } else {
       const color = this.unpushed === null ? undefined : new vscode.ThemeColor(pushed ? 'charts.green' : 'charts.yellow');
-      item.iconPath = new vscode.ThemeIcon('git-commit', color);
+      item.iconPath = new vscode.ThemeIcon(merge ? 'git-merge' : 'git-commit', color);
     }
 
     const tooltip = new vscode.MarkdownString();
     tooltip.appendMarkdown(`**${escape(node.subject)}**\n\n`);
-    tooltip.appendMarkdown(`\`${node.sha}\`\n\n${escape(node.author ?? '')}, ${node.relDate}\n\n`);
+    const when = node.date ? `${new Date(node.date).toLocaleString()} (${node.relDate})` : node.relDate;
+    const email = node.authorEmail ? ` <${node.authorEmail}>` : '';
+    tooltip.appendMarkdown(`\`${node.sha}\`\n\n${escape(`${node.author ?? ''}${email}`)}, ${when}\n\n`);
+    if (merge) tooltip.appendMarkdown(`$(git-merge) Merge commit (${node.parents.length} parents)\n\n`);
+    if (node.onHead === false) tooltip.appendMarkdown('$(git-branch) Not on the current branch\n\n');
     if (node.refs?.length) tooltip.appendMarkdown(`${escape(node.refs.join(', '))}\n\n`);
-    if (this.unpushed !== null) tooltip.appendMarkdown(pushed ? '$(cloud) Pushed' : '$(cloud-upload) Not pushed yet');
+    if (this.unpushed !== null && node.onHead !== false) tooltip.appendMarkdown(pushed ? '$(cloud) Pushed' : '$(cloud-upload) Not pushed yet');
     if (copied) tooltip.appendMarkdown('\n\n$(clippy) Copied for cherry-pick');
     if (isBase) tooltip.appendMarkdown('\n\n$(debug-breakpoint) Marked as base: rebasing onto a branch moves only the commits above this one');
     if (bisect) tooltip.appendMarkdown(`\n\n$(${bisect.icon}) Bisect: ${bisect.label}`);
     tooltip.supportThemeIcons = true;
     item.tooltip = tooltip;
 
-    const flags = [node.sha === this.head && 'head', node.parents.length === 0 && 'root'].filter(Boolean);
+    const flags = [
+      node.sha === this.head && 'head',
+      node.parents.length === 0 && 'root',
+      merge && 'merge',
+      node.onHead === false && 'other',
+    ].filter(Boolean);
     item.contextValue = ['commit', ...flags].join(':');
     return item;
   }

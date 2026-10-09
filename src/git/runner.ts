@@ -15,6 +15,8 @@ export interface ExecOptions {
   env?: Record<string, string>;
   /** Exit codes that resolve instead of throwing. */
   allowedExitCodes?: number[];
+  /** Written to stdin; otherwise stdin is closed. */
+  input?: string;
 }
 
 export interface ExecResult {
@@ -51,7 +53,7 @@ export class Git {
           }
         },
       );
-      child.stdin?.end();
+      child.stdin?.end(options.input);
     });
   }
 

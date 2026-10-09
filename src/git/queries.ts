@@ -13,10 +13,22 @@ export interface Commit {
   sha: string;
   shortSha: string;
   author: string;
+  authorEmail: string;
   relDate: string;
+  /** Author date, ISO 8601. */
+  date: string;
+  /** Committer date, Unix seconds; the order git log uses. */
+  timestamp: number;
   parents: string[];
   refs: string[];
   subject: string;
+}
+
+export interface LogOptions {
+  /** Every branch, remote branch and tag instead of only `ref`. */
+  all?: boolean;
+  /** Case-insensitive text matched against the message and the author, or a SHA prefix. */
+  search?: string;
 }
 
 export interface ReflogEntry {
@@ -61,22 +73,60 @@ function splitList(value: string | undefined, separator: string): string[] {
   return value ? value.split(separator).filter(Boolean) : [];
 }
 
-export async function getLog(git: Git, limit: number, ref = 'HEAD', paths: string[] = []): Promise<Commit[]> {
-  const format = ['%H', '%h', '%an', '%ar', '%P', '%D', '%s'].join(US) + RS;
-  // 128: unborn branch (no commits yet)
-  const result = await git.exec(['log', `--format=${format}`, `-n${limit}`, ref, '--', ...paths], {
-    allowedExitCodes: [128],
-  });
+const LOG_FORMAT = ['%H', '%h', '%an', '%ae', '%ar', '%aI', '%ct', '%P', '%D', '%s'].join(US) + RS;
+
+async function runLog(git: Git, args: string[]): Promise<Commit[]> {
+  // 128: unborn branch (no commits yet), or a SHA that doesn't exist
+  const result = await git.exec(['log', `--format=${LOG_FORMAT}`, ...args], { allowedExitCodes: [128] });
   if (result.exitCode !== 0) return [];
   return records(result.stdout).map((f) => ({
     sha: f[0],
     shortSha: f[1],
     author: f[2],
-    relDate: f[3],
-    parents: splitList(f[4], ' '),
-    refs: splitList(f[5], ', '),
-    subject: f[6] ?? '',
+    authorEmail: f[3],
+    relDate: f[4],
+    date: f[5],
+    timestamp: Number(f[6]),
+    parents: splitList(f[7], ' '),
+    refs: splitList(f[8], ', '),
+    subject: f[9] ?? '',
   }));
+}
+
+/**
+ * Commits reachable from `ref` (or every branch and tag with `all`), newest first, children always before
+ * their parents. With `search`, only commits whose message or author contains the text, or whose SHA starts
+ * with it.
+ */
+export async function getLog(
+  git: Git,
+  limit: number,
+  ref = 'HEAD',
+  paths: string[] = [],
+  options: LogOptions = {},
+): Promise<Commit[]> {
+  // HEAD is included in "all" so a detached HEAD still shows up.
+  const revs = options.all ? ['--branches', '--remotes', '--tags', ref] : [ref];
+  const base = [`-n${limit}`, '--date-order', ...revs];
+  const query = options.search?.trim();
+  if (!query) return runLog(git, [...base, '--', ...paths]);
+
+  const text = ['--regexp-ignore-case', '--fixed-strings'];
+  const [byMessage, byAuthor, bySha] = await Promise.all([
+    runLog(git, [...base, ...text, `--grep=${query}`, '--', ...paths]),
+    runLog(git, [...base, ...text, `--author=${query}`, '--', ...paths]),
+    /^[0-9a-f]{4,40}$/i.test(query) ? runLog(git, ['-n1', `${query}^{commit}`, '--']) : Promise.resolve([]),
+  ]);
+  const found = new Map<string, Commit>();
+  for (const c of [...bySha, ...byMessage, ...byAuthor]) found.set(c.sha, c);
+  return [...found.values()].sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
+}
+
+/** Of `shas`, the ones not reachable from HEAD (for "all branches", where other branches' commits are listed too). */
+export async function notOnHead(git: Git, shas: string[]): Promise<Set<string>> {
+  if (!shas.length) return new Set();
+  const result = await git.exec(['rev-list', '^HEAD', '--stdin'], { input: shas.join('\n') + '\n', allowedExitCodes: [128] });
+  return new Set(result.exitCode === 0 ? splitList(result.stdout, '\n').map((s) => s.trim()) : shas);
 }
 
 /** Commits on HEAD that are not on its upstream, or null when there is no upstream. */

@@ -41,20 +41,23 @@ export function createRunner(
       return false;
     }
     busy = true;
+    let failure: { error: unknown } | undefined;
     try {
       const info = await vscode.window.withProgress({ location: vscode.ProgressLocation.SourceControl, title }, () =>
         fn(ops, repo),
       );
       if (info) void vscode.window.showInformationMessage(info);
-      return true;
     } catch (error) {
-      await reportError(ops, error);
-      return false;
+      failure = { error };
     } finally {
       busy = false;
       await repo.status().catch(() => undefined);
       await refreshAll(true);
     }
+    // Reported only now that this operation no longer counts as running: the conflict prompt's
+    // Continue/Abort buttons start a new one.
+    if (failure) await reportError(ops, failure.error);
+    return !failure;
   }
 
   async function reportError(ops: GitOps, error: unknown): Promise<void> {

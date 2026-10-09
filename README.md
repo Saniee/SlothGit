@@ -4,6 +4,9 @@ Lazygit-inspired power tools that fill the gaps in VS Code's built-in Git suppor
 
 ## Features
 
+### Replaces the Graph view
+The Commits view does what VS Code's built-in **Graph** view does, and more, so CodeGit hides the Graph the first time you open Source Control. To bring it back, use the **…** menu on the Source Control sidebar and tick **Graph**. CodeGit won't hide it again.
+
 ### Fetch / Pull / Push on the Changes view
 The Source Control **Changes** title bar gets Fetch, Pull and Push buttons, like the ones on the Graph view. They run the built-in Git commands for that repository. Turn them off with `codegit.showSyncButtons`.
 
@@ -56,6 +59,14 @@ Commit icons are green when the commit is already on the upstream branch and yel
 
 All rewrites use `git rebase --interactive --autostash`, so a dirty working tree is fine. When a rebase stops (on conflicts, or at a commit you chose to edit), the status bar and the view toolbar offer **Continue / Skip / Abort**. The remaining rebase steps appear at the top of the Commits view, where you can reorder them or change their action (pick, squash, fixup, edit, drop) before continuing.
 
+Each commit shows its SHA, branches and tags, author and relative date; the tooltip has the full date and email. Merge commits get a merge icon.
+
+**Search:** the search button matches text in the message or author name (case-insensitive), or a SHA prefix. Squash and move are disabled while searching, since the neighbouring commits are hidden.
+
+**All branches:** the branch button lists every branch, remote branch and tag together. Other branches' commits are dimmed; you can check them out, branch from them or cherry-pick them, but not rewrite them.
+
+**Commit Graph ("pretty mode"):** the graph button opens the history as a graph in an editor tab: branch lanes, branch and tag labels, author and date columns, search and an all-branches switch. Click a commit for its message and files (click a file for its diff), double-click to open all its changes, and right-click for the same actions as the Commits view.
+
 **Filter by file:** the filter button on the Commits view, or **Show File History in CodeGit** in the Explorer or an editor tab's context menu, limits the log to commits touching that file or folder.
 
 **Bisect:** right-click commits to mark them bad, good or skipped. CodeGit starts the bisect if needed, marks the commits in the list, and offers to reset once git names the first bad commit.
@@ -81,10 +92,25 @@ npm install
 npm test          # builds, then runs unit tests plus real-git integration tests
 npm run playground  # builds ../codegit-playground: a repo with a scenario for every feature (see TESTING.md)
 npm run smoke     # opens your installed VS Code with a throwaway profile and walks every view in a scratch repo
+npm run e2e       # runs every TESTING.md item against the playground in VS Code (~7 min; `npm run e2e -- stash` for a subset)
 npm run watch     # rebuild on change
 ```
 
 Press `F5` to launch an Extension Development Host.
+
+### Releases
+
+Pushing a version tag builds the extension, runs the tests and attaches the `.vsix` to a GitHub Release (see `.github/workflows/release.yml`). Nothing is published to the Marketplace.
+
+```bash
+git tag v0.1.0
+```
+
+```bash
+git push origin v0.1.0
+```
+
+The tag must match `version` in `package.json`. Tags with a suffix, such as `v0.1.0-beta.1`, become pre-releases. Install a release with **Extensions: Install from VSIX…**.
 
 ## Roadmap ideas
 

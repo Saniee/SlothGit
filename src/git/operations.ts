@@ -369,6 +369,11 @@ export class GitOps {
       await this.git.exec(['checkout', target, '--'], { env });
       return;
     }
+    if (action.kind === 'commit') {
+      // Moves the branch only: undoing leaves the commit's changes staged, redoing commits them again.
+      await this.git.exec(['reset', '--soft', target], { env });
+      return;
+    }
     const stash = await isDirty(this.git);
     if (stash) await this.git.exec(['stash', 'push', '--include-untracked', '-m', `codegit: autostash for ${direction}`]);
     try {

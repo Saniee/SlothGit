@@ -27,6 +27,7 @@ const builds = tests
       },
       // Runs inside VS Code via scripts/smoke.mjs; not picked up by `node --test`.
       { ...common, entryPoints: ['test/smoke/index.ts'], outfile: 'out-test/smoke/index.js', external: ['vscode'] },
+      { ...common, entryPoints: ['test/e2e/index.ts'], outfile: 'out-test/e2e/index.js', external: ['vscode'] },
     ]
   : [
       { ...common, entryPoints: ['src/extension.ts'], outfile: 'dist/extension.js', external: ['vscode'] },

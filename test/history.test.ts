@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
+import { parseRefs } from '../src/git/graph';
 import { commitUrl, pullRequestUrl, toWebRepo } from '../src/git/hosting';
 import { buildEditorCommand, GitOps } from '../src/git/operations';
 import {
@@ -14,6 +15,7 @@ import {
   getOperation,
   getRebaseTodo,
   getWorktrees,
+  notOnHead,
   type FileChange,
 } from '../src/git/queries';
 import { Git } from '../src/git/runner';
@@ -68,6 +70,14 @@ test('planUndo: pure replay of undo/redo markers and rebase grouping', () => {
     { sha: 'a', subject: 'commit (initial): a' },
   ]);
   assert.deepEqual(plan.undo, { kind: 'reset', from: 'c', to: 'e', description: 'rebase' });
+  const commitThenReset = (subject: string) =>
+    planUndo([
+      { sha: 'c', subject },
+      { sha: 'b', subject: 'commit: b' },
+    ]).undo?.kind;
+  assert.equal(commitThenReset('commit: c'), 'commit');
+  assert.equal(commitThenReset('commit (amend): c'), 'commit');
+  assert.equal(commitThenReset('reset: moving to HEAD~1'), 'reset');
   assert.equal(plan.redo, undefined);
 
   const afterUndo = planUndo([
@@ -86,19 +96,36 @@ test('planUndo: pure replay of undo/redo markers and rebase grouping', () => {
   assert.equal(inRebase.rebaseInProgress, true);
 });
 
-test('undo and redo commits, keeping uncommitted changes', async () => {
+test('undo and redo commits: undone changes come back staged, uncommitted changes are kept', async () => {
   const r = setup();
   r.write('dirty.txt', 'keep me\n');
   await undo(r);
   assert.deepEqual(r.subjects(), ['c2', 'c1']);
+  assert.equal(r.sh('diff', '--cached', '--name-only'), 'f3.txt');
   await undo(r);
   assert.deepEqual(r.subjects(), ['c1']);
+  assert.equal(r.sh('diff', '--cached', '--name-only'), 'f2.txt\nf3.txt');
   await redo(r);
   assert.deepEqual(r.subjects(), ['c2', 'c1']);
+  assert.equal(r.sh('diff', '--cached', '--name-only'), 'f3.txt');
+  await redo(r);
+  assert.deepEqual(r.subjects(), ['c3', 'c2', 'c1']);
+  assert.equal(r.sh('diff', '--cached', '--name-only'), '');
   assert.equal(r.read('dirty.txt'), 'keep me\n');
   // A new action clears the redo stack.
   r.commit('x.txt', 'x\n', 'new');
   assert.equal((await r.ops.planUndo()).redo, undefined);
+});
+
+test('undo an amend leaves the amendment staged', async () => {
+  const r = setup();
+  const before = r.sh('rev-parse', 'HEAD');
+  r.write('f3.txt', 'amended\n');
+  r.sh('commit', '-q', '-a', '--amend', '--no-edit');
+  await undo(r);
+  assert.equal(r.sh('rev-parse', 'HEAD'), before);
+  assert.equal(r.sh('diff', '--cached', '--name-only'), 'f3.txt');
+  assert.equal(r.read('f3.txt'), 'amended\n');
 });
 
 test('undo a checkout and a whole rebase', async () => {
@@ -264,6 +291,40 @@ test('log filtered by path', async () => {
   assert.deepEqual((await getLog(r.git, 10, 'HEAD', ['f1.txt'])).map((c) => c.subject), ['c4', 'c1']);
 });
 
+test('log search by message, author and SHA; all branches; commits not on HEAD', async () => {
+  const r = setup(3);
+  r.sh('switch', '-q', '-c', 'side', 'HEAD~1');
+  r.write('side.txt', 'side\n');
+  r.sh('add', '.');
+  r.sh('-c', 'user.name=Grace Hopper', 'commit', '-q', '-m', 'Side quest');
+  const side = r.sh('rev-parse', 'HEAD');
+  r.sh('switch', '-q', 'main');
+  const subjects = (commits: { subject: string }[]) => commits.map((c) => c.subject);
+
+  assert.deepEqual(subjects(await getLog(r.git, 10)), ['c3', 'c2', 'c1'], 'HEAD only by default');
+  const all = await getLog(r.git, 10, 'HEAD', [], { all: true });
+  assert.deepEqual(new Set(subjects(all)), new Set(['Side quest', 'c3', 'c2', 'c1']));
+  assert.ok(all.findIndex((c) => c.subject === 'Side quest') < all.findIndex((c) => c.subject === 'c2'), 'children before parents');
+
+  assert.deepEqual(subjects(await getLog(r.git, 10, 'HEAD', [], { search: 'C2' })), ['c2'], 'message, case-insensitive');
+  assert.deepEqual(subjects(await getLog(r.git, 10, 'HEAD', [], { search: 'grace', all: true })), ['Side quest'], 'author');
+  assert.deepEqual(subjects(await getLog(r.git, 10, 'HEAD', [], { search: side.slice(0, 8) })), ['Side quest'], 'SHA prefix');
+  assert.deepEqual(subjects(await getLog(r.git, 10, 'HEAD', [], { search: 'c[2' })), [], 'text, not a regex');
+
+  const others = await notOnHead(r.git, all.map((c) => c.sha));
+  assert.deepEqual([...others], [side]);
+});
+
+test('graph refs from git log decorations', () => {
+  assert.deepEqual(parseRefs(['HEAD -> main', 'origin/main', 'origin/HEAD', 'tag: v1.0', 'feature/x', 'up/stream'], ['origin', 'up']), [
+    { name: 'main', kind: 'head' },
+    { name: 'origin/main', kind: 'remote' },
+    { name: 'v1.0', kind: 'tag' },
+    { name: 'feature/x', kind: 'local' },
+    { name: 'up/stream', kind: 'remote' },
+  ]);
+});
+
 // --- hosting -------------------------------------------------------------------------------
 
 test('web URLs for common hosts', () => {
@@ -272,6 +333,10 @@ test('web URLs for common hosts', () => {
   assert.equal(toWebRepo('https://user@github.com/owner/repo.git')!.url, 'https://github.com/owner/repo');
   assert.equal(toWebRepo('ssh://git@gitlab.example.com:2222/group/sub/repo.git')!.url, 'https://gitlab.example.com/group/sub/repo');
   assert.equal(commitUrl(gh, 'abc'), 'https://github.com/owner/repo/commit/abc');
+  // Local remotes have no web page (and "C:" is not a host).
+  for (const local of ['C:\\work\\origin.git', 'C:/work/origin.git', '/srv/git/origin.git', '../origin.git']) {
+    assert.equal(toWebRepo(local), undefined, local);
+  }
   assert.equal(pullRequestUrl(gh, 'feature/x', 'main'), 'https://github.com/owner/repo/compare/main...feature/x?expand=1');
 
   const gl = toWebRepo('git@gitlab.com:group/repo.git')!;

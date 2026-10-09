@@ -4,6 +4,10 @@
   "description": "Lazygit-inspired power tools for VS Code's built-in Git: rewrite history from a commit list, amend older commits, manage stashes, browse the reflog.",
   "version": "0.0.1",
   "publisher": "codegit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Saniee/CodeGit.git"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -645,6 +649,36 @@
         "title": "Push",
         "category": "CodeGit",
         "icon": "$(repo-push)"
+      },
+      {
+        "command": "codegit.commits.search",
+        "title": "Search Commits…",
+        "category": "CodeGit",
+        "icon": "$(search)"
+      },
+      {
+        "command": "codegit.commits.clearSearch",
+        "title": "Clear Search",
+        "category": "CodeGit",
+        "icon": "$(search-stop)"
+      },
+      {
+        "command": "codegit.commits.showAllBranches",
+        "title": "Show All Branches",
+        "category": "CodeGit",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "codegit.commits.showCurrentBranch",
+        "title": "Show Current Branch Only",
+        "category": "CodeGit",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "codegit.graph.open",
+        "title": "Open Commit Graph",
+        "category": "CodeGit",
+        "icon": "$(graph)"
       }
     ],
     "menus": {
@@ -768,6 +802,31 @@
           "command": "codegit.worktree.add",
           "when": "view == codegit.branches",
           "group": "1_branch@4"
+        },
+        {
+          "command": "codegit.commits.search",
+          "when": "view == codegit.commits && !codegit.commitsSearching",
+          "group": "navigation@9"
+        },
+        {
+          "command": "codegit.commits.clearSearch",
+          "when": "view == codegit.commits && codegit.commitsSearching",
+          "group": "navigation@9"
+        },
+        {
+          "command": "codegit.commits.showAllBranches",
+          "when": "view == codegit.commits && !codegit.commitsAllBranches",
+          "group": "navigation@10"
+        },
+        {
+          "command": "codegit.commits.showCurrentBranch",
+          "when": "view == codegit.commits && codegit.commitsAllBranches",
+          "group": "navigation@10"
+        },
+        {
+          "command": "codegit.graph.open",
+          "when": "view == codegit.commits",
+          "group": "navigation@11"
         }
       ],
       "view/item/context": [
@@ -778,52 +837,52 @@
         },
         {
           "command": "codegit.commit.moveUp",
-          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:head)/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:(head|other))/",
           "group": "inline@2"
         },
         {
           "command": "codegit.commit.moveDown",
-          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:root)/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:(root|other))/",
           "group": "inline@3"
         },
         {
           "command": "codegit.commit.squash",
-          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:other)/",
           "group": "1_rebase@1"
         },
         {
           "command": "codegit.commit.fixup",
-          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:other)/",
           "group": "1_rebase@2"
         },
         {
           "command": "codegit.commit.drop",
-          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:other)/",
           "group": "1_rebase@3"
         },
         {
           "command": "codegit.commit.reword",
-          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:other)/",
           "group": "1_rebase@4"
         },
         {
           "command": "codegit.commit.edit",
-          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:other)/",
           "group": "1_rebase@5"
         },
         {
           "command": "codegit.commit.amendStaged",
-          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:other)/",
           "group": "1_rebase@6"
         },
         {
           "command": "codegit.commit.moveUp",
-          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:other)/",
           "group": "1_rebase@7"
         },
         {
           "command": "codegit.commit.moveDown",
-          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:other)/",
           "group": "1_rebase@8"
         },
         {
@@ -1068,22 +1127,22 @@
         },
         {
           "command": "codegit.commit.rewordInEditor",
-          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:other)/",
           "group": "1b_amend@1"
         },
         {
           "command": "codegit.commit.amendAuthor",
-          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:other)/",
           "group": "1b_amend@2"
         },
         {
           "command": "codegit.commit.createFixup",
-          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:other)/",
           "group": "1b_amend@3"
         },
         {
           "command": "codegit.commit.autosquash",
-          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:other)/",
           "group": "1b_amend@4"
         },
         {
@@ -1556,6 +1615,18 @@
         {
           "command": "codegit.scm.push",
           "when": "false"
+        },
+        {
+          "command": "codegit.commits.clearSearch",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commits.showAllBranches",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commits.showCurrentBranch",
+          "when": "false"
         }
       ],
       "explorer/context": [
@@ -1588,6 +1659,103 @@
           "group": "navigation@3",
           "when": "scmProvider == git && config.codegit.showSyncButtons"
         }
+      ],
+      "webview/context": [
+        {
+          "command": "codegit.commit.openChanges",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit'",
+          "group": "1_open@1"
+        },
+        {
+          "command": "codegit.commit.copy",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit'",
+          "group": "1_open@2"
+        },
+        {
+          "command": "codegit.commit.checkout",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit'",
+          "group": "2_refs@1"
+        },
+        {
+          "command": "codegit.commit.createBranch",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit'",
+          "group": "2_refs@2"
+        },
+        {
+          "command": "codegit.commit.createTag",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit'",
+          "group": "2_refs@3"
+        },
+        {
+          "command": "codegit.commit.copyForCherryPick",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit'",
+          "group": "3_cherry@1"
+        },
+        {
+          "command": "codegit.commit.pasteCherryPick",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit' && codegit.hasCherryPicks",
+          "group": "3_cherry@2"
+        },
+        {
+          "command": "codegit.commit.reword",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit' && codegitOnHead",
+          "group": "4_rewrite@1"
+        },
+        {
+          "command": "codegit.commit.squash",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit' && codegitOnHead",
+          "group": "4_rewrite@2"
+        },
+        {
+          "command": "codegit.commit.fixup",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit' && codegitOnHead",
+          "group": "4_rewrite@3"
+        },
+        {
+          "command": "codegit.commit.drop",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit' && codegitOnHead",
+          "group": "4_rewrite@4"
+        },
+        {
+          "command": "codegit.commit.edit",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit' && codegitOnHead",
+          "group": "4_rewrite@5"
+        },
+        {
+          "command": "codegit.commit.amendAuthor",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit' && codegitOnHead",
+          "group": "4_rewrite@6"
+        },
+        {
+          "command": "codegit.commit.createFixup",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit' && codegitOnHead",
+          "group": "4_rewrite@7"
+        },
+        {
+          "command": "codegit.commit.reset",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit'",
+          "group": "5_reset@1"
+        },
+        {
+          "command": "codegit.commit.revert",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit'",
+          "group": "5_reset@2"
+        },
+        {
+          "command": "codegit.compare.select",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit'",
+          "group": "6_compare@1"
+        },
+        {
+          "command": "codegit.compare.withSelected",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit' && codegit.hasCompareBase",
+          "group": "6_compare@2"
+        },
+        {
+          "command": "codegit.commit.copySha",
+          "when": "webviewId == 'codegit.graph' && webviewSection == 'commit'",
+          "group": "7_copy@1"
+        }
       ]
     }
   },
@@ -1599,7 +1767,8 @@
     "vscode:prepublish": "npm run typecheck && node esbuild.mjs --production",
     "package": "vsce package",
     "smoke": "node scripts/smoke.mjs",
-    "playground": "node scripts/playground.mjs"
+    "playground": "node scripts/playground.mjs",
+    "e2e": "node scripts/e2e.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

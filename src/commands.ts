@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { fromGraph } from './views/graphPanel';
 import type { GitOps } from './git/operations';
 import { commitUrl, toWebRepo, type WebRepo } from './git/hosting';
 import { getCommitMessage, getOperation, getRemotes, type Operation } from './git/queries';
@@ -68,10 +69,14 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   }
 
   /**
-   * Whether history can be rewritten right now. `fullHistory` marks actions that depend on neighbouring
-   * commits (squash into previous, move), which a file filter hides.
+   * Whether `nodes` can be rewritten right now. `fullHistory` marks actions that depend on neighbouring
+   * commits (squash into previous, move), which a file filter or search hides.
    */
-  async function canRewrite(fullHistory = false): Promise<boolean> {
+  async function canRewrite(nodes: CommitNode[], fullHistory = false): Promise<boolean> {
+    if (nodes.some((n) => n.onHead === false)) {
+      void vscode.window.showWarningMessage('That commit is not on the current branch. Check out its branch to rewrite it.');
+      return false;
+    }
     if (commits.bisect) {
       void vscode.window.showWarningMessage('Finish or reset the bisect before rewriting history.');
       return false;
@@ -82,8 +87,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       void vscode.window.showWarningMessage(`A ${operation} is in progress. Continue or abort it first.`);
       return false;
     }
-    if (fullHistory && commits.filterPath) {
-      void vscode.window.showWarningMessage('This action needs the full history. Clear the file filter first.');
+    if (fullHistory && (commits.filterPath || commits.search)) {
+      const what = commits.filterPath ? 'file filter' : 'search';
+      void vscode.window.showWarningMessage(`This action needs the full history. Clear the ${what} first.`);
       return false;
     }
     return true;
@@ -101,7 +107,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         const node = single(nodes);
         nodes = node ? [node] : [];
       }
-      if (!nodes.length || !(await canRewrite(options.fullHistory))) return;
+      if (!nodes.length || !(await canRewrite(nodes, options.fullHistory))) return;
       const question = options.confirm?.(nodes);
       if (question && !(await confirm(question, 'Continue'))) return;
       if (!(await confirmRewrite(nodes))) return;
@@ -141,7 +147,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     }),
     'codegit.commit.createFixup': async (arg?: Node, all?: Node[]) => {
       const node = single(logTargets(arg, all));
-      if (node && (await canRewrite())) {
+      if (node && (await canRewrite([node]))) {
         await run('Creating fixup commit…', async (ops) => {
           await ops.createFixupCommit(node.sha);
           return `Created "fixup! ${node.subject}". Use "Squash Fixup Commits Above" to fold it in.`;
@@ -150,7 +156,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     },
     'codegit.commit.amendAuthor': async (arg?: Node, all?: Node[]) => {
       const node = single(logTargets(arg, all));
-      if (!node || !(await canRewrite())) return;
+      if (!node || !(await canRewrite([node]))) return;
       const picked = await vscode.window.showQuickPick(
         [
           { label: 'Reset Author', description: 'Use your current user.name and user.email', id: 'reset' },
@@ -193,7 +199,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     'codegit.commit.reword': async (arg?: Node, all?: Node[]) => {
       const node = single(logTargets(arg, all));
       const git = repos.git();
-      if (!node || !git || !(await canRewrite())) return;
+      if (!node || !git || !(await canRewrite([node]))) return;
       const message = await getCommitMessage(git, node.sha);
       const [subject, ...body] = message.split('\n');
       const newSubject = await vscode.window.showInputBox({
@@ -210,7 +216,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     'codegit.commit.rewordInEditor': async (arg?: Node, all?: Node[]) => {
       const node = single(logTargets(arg, all));
       const git = repos.git();
-      if (!node || !git || !(await canRewrite())) return;
+      if (!node || !git || !(await canRewrite([node]))) return;
       const original = await getCommitMessage(git, node.sha);
       const file = path.resolve(git.cwd, (await git.run(['rev-parse', '--git-path', 'CODEGIT_EDITMSG'])).trim());
       const edited = await editInEditor(file, original, `Reword ${node.shortSha}`);
@@ -267,7 +273,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       const node = resolve<FileNode>('file', commitsView, arg)[0];
       if (!node) return;
       const { right, left } = diffUris(repos, node);
-      await vscode.window.showTextDocument(node.pair.change.status === 'D' ? left : right, { preview: true });
+      const uri = node.pair.change.status === 'D' ? left : right;
+      await loadDocuments(`Loading ${path.posix.basename(node.pair.change.path)}…`, [uri]);
+      await vscode.window.showTextDocument(uri, { preview: true });
     },
 
     'codegit.commit.copyForCherryPick': (arg?: Node, all?: Node[]) => {
@@ -341,6 +349,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       if (!root) return;
       const { left, right } = diffUris(repos, node);
       const title = `${path.posix.basename(node.pair.change.path)} (${node.label})`;
+      await loadDocuments(`Loading ${path.posix.basename(node.pair.change.path)}…`, existingSides({ left, right }, node));
       await vscode.commands.executeCommand('vscode.diff', left, right, title, { preview: true });
     },
 
@@ -416,7 +425,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       void vscode.window.showInformationMessage('Select files from a single commit.');
       return;
     }
-    if (!(await canRewrite())) return;
+    if (!(await canRewrite([commit]))) return;
     const names = files.length === 1 ? files[0].pair.change.path : `${files.length} files`;
     const question = keep
       ? `Take the changes to ${names} out of ${commit.shortSha} and stage them in your working tree?`
@@ -443,7 +452,8 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     }
   }
 
-  return Object.entries(commands).map(([id, handler]) => vscode.commands.registerCommand(id, handler));
+  // fromGraph: the graph panel's context menu passes a webview context instead of a node.
+  return Object.entries(commands).map(([id, handler]) => vscode.commands.registerCommand(id, (...args: unknown[]) => handler(...fromGraph(args))));
 }
 
 export function diffUris(repos: RepoManager, node: FileNode) {
@@ -465,9 +475,59 @@ export async function openMultiDiff(repos: RepoManager, title: string, files: Fi
   }
   const resources = files.map((f) => {
     const { left, right, uri } = diffUris(repos, f);
-    return [uri, left, right];
+    // Like the Git extension: no original for added files, no modified for deleted ones.
+    const { status } = f.pair.change;
+    return [uri, status === 'A' ? undefined : left, status === 'D' ? undefined : right];
   });
+  // The multi-diff editor renders lazily, so loading the first screenful is enough.
+  const firstScreen = files.slice(0, PRELOAD_FILES).flatMap((f) => existingSides(diffUris(repos, f), f));
+  await loadDocuments(`Loading changes (${files.length} ${files.length === 1 ? 'file' : 'files'})…`, firstScreen);
   await vscode.commands.executeCommand('vscode.changes', title, resources);
+}
+
+/** The sides of a diff that have content: an added file has no left side, a deleted one no right side. */
+function existingSides({ left, right }: { left: vscode.Uri; right: vscode.Uri }, file: FileNode): vscode.Uri[] {
+  const { status } = file.pair.change;
+  return status === 'A' ? [right] : status === 'D' ? [left] : [left, right];
+}
+
+const PRELOAD_FILES = 15;
+const NOTIFY_AFTER_MS = 400;
+
+/**
+ * Loads git: documents before an editor shows them. Their content comes from `git show`, which can take a
+ * moment, and an editor opened before that shows up empty. A progress notification appears if loading
+ * takes noticeably long.
+ */
+export async function loadDocuments(title: string, uris: vscode.Uri[]): Promise<void> {
+  const queue = [...uris];
+  let done = 0;
+  let progress: vscode.Progress<{ message?: string }> | undefined;
+  const report = () => uris.length > 2 && progress?.report({ message: `${Math.round((done / uris.length) * 100)}%` });
+  const worker = async () => {
+    for (let uri = queue.shift(); uri; uri = queue.shift()) {
+      try {
+        await vscode.workspace.openTextDocument(uri);
+      } catch {
+        // Binary files and missing sides (added/deleted files): the editor explains those itself.
+      }
+      done++;
+      report();
+    }
+  };
+  const work = Promise.all(Array.from({ length: 4 }, worker));
+  const timer = setTimeout(() => {
+    void vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, (p) => {
+      progress = p;
+      report();
+      return work;
+    });
+  }, NOTIFY_AFTER_MS);
+  try {
+    await work;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function createTag(runner: Runner, rev: string, label: string): Promise<void> {

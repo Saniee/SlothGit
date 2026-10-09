@@ -14,8 +14,11 @@ export interface ReflogItem {
 }
 
 export interface UndoAction {
-  /** checkout: switch between branches/commits; reset: move the current branch. */
-  kind: 'checkout' | 'reset';
+  /**
+   * checkout: switch between branches/commits. commit: a commit or amend, undone with a soft reset so its
+   * changes come back staged (as lazygit does). reset: anything else that moved the current branch.
+   */
+  kind: 'checkout' | 'commit' | 'reset';
   /** State before the action: a branch name or commit for checkouts, a commit for resets. */
   from: string;
   /** State after the action. */
@@ -32,6 +35,8 @@ export interface UndoPlan {
 }
 
 const CHECKOUT = /^checkout: moving from (\S+) to (\S+)$/;
+// "commit: …", "commit (amend): …", "commit (merge): …": lazygit's COMMIT kind.
+const COMMIT = /^commit\b/;
 // "rebase (start)", "rebase -i (start)", "pull --rebase (start)", likewise finish/abort.
 const REBASE_START = /^[^:]*\brebase\b[^:]*\(start\)/;
 const REBASE_END = /^[^:]*\brebase\b[^:]*\((finish|abort)\)/;
@@ -72,7 +77,8 @@ export function planUndo(entries: ReflogItem[]): UndoPlan {
       if (checkout) {
         record({ kind: 'checkout', from: checkout[1], to: checkout[2], description: entry.subject });
       } else if (previous) {
-        record({ kind: 'reset', from: previous, to: entry.sha, description: entry.subject });
+        const kind = COMMIT.test(entry.subject) ? 'commit' : 'reset';
+        record({ kind, from: previous, to: entry.sha, description: entry.subject });
       }
     }
   });

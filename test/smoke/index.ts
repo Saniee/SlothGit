@@ -112,6 +112,18 @@ export async function run(): Promise<void> {
   await vscode.commands.executeCommand('codegit.commit.clearCherryPick');
   log('commands executed');
 
+  // Opening diffs: the contents are loaded before the editor appears, so it is never blank.
+  const [head] = (await api.providers.commits.getChildren()) as Node[];
+  const files = (await api.providers.commits.getChildren(head)) as Node[];
+  await vscode.commands.executeCommand('codegit.openFileDiff', files[0]);
+  const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+  assert.ok(tab?.input instanceof vscode.TabInputTextDiff, 'a diff editor opened');
+  const loaded = vscode.workspace.textDocuments.find((d) => d.uri.toString() === (tab.input as vscode.TabInputTextDiff).modified.toString());
+  assert.ok(loaded && loaded.getText().length > 0, 'the diff content was loaded');
+  await vscode.commands.executeCommand('codegit.commit.openChanges', head);
+  log(`diffs open with content (${tab.label})`);
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+
   // 6. The Changes title-bar buttons forward to the built-in Git commands for the right repository.
   await vscode.commands.executeCommand('codegit.scm.fetch', gitApi.repositories[0]);
   await vscode.commands.executeCommand('codegit.scm.pull', gitApi.repositories[0]);

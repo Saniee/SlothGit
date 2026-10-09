@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as vscode from 'vscode';
+import { fromGraph } from './views/graphPanel';
 import { openMultiDiff } from './commands';
 import { getCommitFiles, getOperation, rebaseTodoPath } from './git/queries';
 import { transformTodo, type TodoAction } from './git/todo';
@@ -41,9 +42,13 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
     const short = (rev: string) => (/^[0-9a-f]{40}$/.test(rev) ? rev.slice(0, 7) : rev);
     const branch = repos.repository?.state.HEAD?.name ?? 'HEAD';
     const verb = direction === 'undo' ? 'Undo' : 'Redo';
-    return action.kind === 'checkout'
-      ? `${verb} "${action.description}"? This checks out ${short(target)}.`
-      : `${verb} "${action.description}"? This resets ${branch} to ${short(target)}. Uncommitted changes are kept.`;
+    if (action.kind === 'checkout') return `${verb} "${action.description}"? This checks out ${short(target)}.`;
+    if (action.kind === 'commit') {
+      return direction === 'undo'
+        ? `Undo "${action.description}"? This moves ${branch} back to ${short(target)} and leaves the commit's changes staged.`
+        : `Redo "${action.description}"? This moves ${branch} to ${short(target)} again. Your files are not touched.`;
+    }
+    return `${verb} "${action.description}"? This resets ${branch} to ${short(target)}. Uncommitted changes are kept.`;
   }
 
   async function undoRedo(direction: 'undo' | 'redo'): Promise<void> {
@@ -178,6 +183,31 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
       await deps.refreshAll(true);
     },
 
+    'codegit.commits.search': async () => {
+      const query = await vscode.window.showInputBox({
+        title: 'Search commits',
+        value: commits.search,
+        placeHolder: 'Text in the message or author name, or a SHA',
+        prompt: 'Case-insensitive. Leave empty to show all commits.',
+      });
+      if (query === undefined) return;
+      commits.search = query.trim() || undefined;
+      await deps.refreshAll(true);
+      await vscode.commands.executeCommand('codegit.commits.focus');
+    },
+    'codegit.commits.clearSearch': async () => {
+      commits.search = undefined;
+      await deps.refreshAll(true);
+    },
+    'codegit.commits.showAllBranches': async () => {
+      commits.allBranches = true;
+      await deps.refreshAll(true);
+    },
+    'codegit.commits.showCurrentBranch': async () => {
+      commits.allBranches = false;
+      await deps.refreshAll(true);
+    },
+
     'codegit.todo.moveUp': (arg?: Node) => editTodo(arg, (node) => ({ move: { sha: node.sha, direction: 'up' } })),
     'codegit.todo.moveDown': (arg?: Node) => editTodo(arg, (node) => ({ move: { sha: node.sha, direction: 'down' } })),
     'codegit.todo.setAction': async (arg?: Node) => {
@@ -198,5 +228,6 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
     },
   };
 
-  return Object.entries(commands).map(([id, handler]) => vscode.commands.registerCommand(id, handler));
+  // fromGraph: the graph panel's context menu passes a webview context instead of a node.
+  return Object.entries(commands).map(([id, handler]) => vscode.commands.registerCommand(id, (...args: unknown[]) => handler(...fromGraph(args))));
 }

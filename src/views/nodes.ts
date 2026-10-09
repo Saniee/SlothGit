@@ -17,8 +17,13 @@ export interface CommitNode {
   /** Position in its list; 0 is the newest. */
   index: number;
   author?: string;
+  authorEmail?: string;
+  /** Author date, ISO 8601. */
+  date?: string;
   refs?: string[];
   selector?: string;
+  /** False for commits of other branches, listed in "all branches" mode; they can't be rewritten. */
+  onHead?: boolean;
 }
 
 export interface StashNode {

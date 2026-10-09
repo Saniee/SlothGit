@@ -13,6 +13,8 @@ export function toWebRepo(remoteUrl: string): WebRepo | undefined {
   let host: string;
   let repoPath: string;
 
+  // Local paths have no web page; "C:\repo" or "C:/repo" would otherwise parse as host "C" in scp syntax.
+  if (/^[a-zA-Z]:[\\/]/.test(remoteUrl) || remoteUrl.includes('\\')) return undefined;
   const scp = /^(?:[^@/]+@)?([^:/]+):(?!\/\/)(.+)$/.exec(remoteUrl);
   const url = /^(?:https?|ssh|git):\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/.exec(remoteUrl);
   if (url) {

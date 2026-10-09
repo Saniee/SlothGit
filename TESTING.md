@@ -1,5 +1,7 @@
 # Manual testing
 
+Everything in the checklist below is also covered by `npm run e2e`. It opens a separate VS Code window on a fresh playground, runs each item with scripted answers to CodeGit's prompts, and checks the resulting git state. The window's status bar and the terminal show progress; the repository visibly resets between scenarios. Manual testing is still useful for what automation can't judge, such as layout, wording and how the workflow feels.
+
 ## Get a playground
 
 ```bash
@@ -62,6 +64,10 @@ Tick off what you tried and note anything odd, such as wrong labels, missing ref
 - [ ] Copy… (each item), open in browser
 - [ ] Commit files: open diff, open at revision, checkout file, remove from commit, move to index, Open All Changes
 - [ ] Filter by file (toolbar, Explorer context menu, editor tab context menu), clear filter
+- [ ] Search by message, author and SHA; clear search
+- [ ] All branches: other branches' commits are dimmed and can't be rewritten
+- [ ] Commit Graph: lanes for `feature/with-merge` and all branches, labels, search, details pane, file diffs, double-click, right-click actions
+- [ ] Commit Graph next to GitLens's graph: what's missing or worse?
 - [ ] During a paused rebase: todo list at the top; change actions / reorder; Continue / Skip / Abort
 - [ ] Bisect: bad / good / skip, marks shown, status bar, reset
 - [ ] Compare: select, compare with selected (commits, branches, tags mixed)

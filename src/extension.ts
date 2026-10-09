@@ -8,6 +8,7 @@ import { createRunner } from './runner';
 import type { GitExtension } from './types/git';
 import { BranchesProvider } from './views/branches';
 import { CherryPickClipboard } from './views/cherryPickClipboard';
+import { GraphPanel } from './views/graphPanel';
 import type { Node } from './views/nodes';
 import { CommitsProvider, ReflogProvider, StashProvider } from './views/providers';
 
@@ -108,10 +109,38 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodeGi
     ...registerCommands({ repos, commits, commitsView, stashView, clipboard, runner, refreshAll }),
     ...registerBranchCommands({ repos, branches, branchesView, commits, runner }),
     ...registerHistoryCommands({ repos, commits, commitsView, runner, refreshAll }),
+    vscode.commands.registerCommand('codegit.graph.open', () => GraphPanel.show(context, repos)),
   );
+
+  hideGraphOnce(context, [commitsView, branchesView, stashView, reflogView]);
 
   void refreshAll(true);
   return { providers: { commits, branches, stashes, reflog }, refreshAll };
+}
+
+const GRAPH_HIDDEN_KEY = 'graphViewHidden';
+
+/**
+ * The Commits view replaces the built-in Graph view, so hide that once, the first time the Source Control
+ * sidebar is open (VS Code only hides views in an open container). If the user shows it again, it stays.
+ */
+function hideGraphOnce(context: vscode.ExtensionContext, views: vscode.TreeView<Node>[]): void {
+  if (context.globalState.get(GRAPH_HIDDEN_KEY)) return;
+  let done = false;
+  const hide = async () => {
+    if (done) return;
+    done = true;
+    listeners.forEach((l) => l.dispose());
+    try {
+      await vscode.commands.executeCommand('workbench.scm.history.removeView');
+    } catch {
+      // Older VS Code without the Graph view.
+    }
+    await context.globalState.update(GRAPH_HIDDEN_KEY, true);
+  };
+  const listeners = views.map((v) => v.onDidChangeVisibility((e) => e.visible && void hide()));
+  context.subscriptions.push(...listeners);
+  if (views.some((v) => v.visible)) void hide();
 }
 
 export function deactivate(): void {}
