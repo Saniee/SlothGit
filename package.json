@@ -1,0 +1,1616 @@
+{
+  "name": "codegit",
+  "displayName": "CodeGit",
+  "description": "Lazygit-inspired power tools for VS Code's built-in Git: rewrite history from a commit list, amend older commits, manage stashes, browse the reflog.",
+  "version": "0.0.1",
+  "publisher": "codegit",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "lazygit",
+    "rebase",
+    "stash",
+    "reflog"
+  ],
+  "extensionDependencies": [
+    "vscode.git"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "CodeGit",
+      "properties": {
+        "codegit.commitLimit": {
+          "type": "number",
+          "default": 300,
+          "minimum": 10,
+          "description": "Maximum number of commits shown in the Commits view."
+        },
+        "codegit.reflogLimit": {
+          "type": "number",
+          "default": 200,
+          "minimum": 10,
+          "description": "Maximum number of entries shown in the Reflog view."
+        },
+        "codegit.confirmRewritingPushedCommits": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask for confirmation before rewriting commits that are already on the upstream branch."
+        },
+        "codegit.branchSort": {
+          "type": "string",
+          "enum": [
+            "recency",
+            "date",
+            "name"
+          ],
+          "enumDescriptions": [
+            "Most recently checked out first (lazygit default)",
+            "Latest commit first",
+            "Alphabetical"
+          ],
+          "default": "recency",
+          "description": "Order of local branches in the Branches view. The current branch is always first."
+        },
+        "codegit.showSyncButtons": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Fetch, Pull and Push buttons on the Source Control \"Changes\" title bar."
+        }
+      }
+    },
+    "views": {
+      "scm": [
+        {
+          "id": "codegit.branches",
+          "name": "Branches",
+          "icon": "$(git-branch)"
+        },
+        {
+          "id": "codegit.commits",
+          "name": "Commits",
+          "icon": "$(git-commit)"
+        },
+        {
+          "id": "codegit.stashes",
+          "name": "Stashes",
+          "icon": "$(archive)"
+        },
+        {
+          "id": "codegit.reflog",
+          "name": "Reflog",
+          "icon": "$(history)",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "codegit.commits",
+        "contents": "No Git repository is open.",
+        "when": "!codegit.hasRepository"
+      },
+      {
+        "view": "codegit.stashes",
+        "contents": "No stashes.\n[Stash All Changes](command:codegit.stash.push)",
+        "when": "codegit.hasRepository"
+      },
+      {
+        "view": "codegit.branches",
+        "contents": "No Git repository is open.",
+        "when": "!codegit.hasRepository"
+      }
+    ],
+    "commands": [
+      {
+        "command": "codegit.refresh",
+        "title": "Refresh",
+        "category": "CodeGit",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "codegit.switchRepository",
+        "title": "Switch Repository…",
+        "category": "CodeGit",
+        "icon": "$(repo)"
+      },
+      {
+        "command": "codegit.commit.squash",
+        "title": "Squash into Previous Commit",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.fixup",
+        "title": "Fixup into Previous Commit",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.drop",
+        "title": "Drop Commit",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.reword",
+        "title": "Reword Commit…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.edit",
+        "title": "Edit Commit (Pause Rebase Here)",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.amendStaged",
+        "title": "Amend Staged Changes into Commit",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.moveUp",
+        "title": "Move Commit Up",
+        "category": "CodeGit",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "codegit.commit.moveDown",
+        "title": "Move Commit Down",
+        "category": "CodeGit",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "codegit.commit.copyForCherryPick",
+        "title": "Copy for Cherry-Pick",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.pasteCherryPick",
+        "title": "Paste Copied Commits (Cherry-Pick)",
+        "category": "CodeGit",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "codegit.commit.clearCherryPick",
+        "title": "Clear Copied Commits",
+        "category": "CodeGit",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "codegit.commit.checkout",
+        "title": "Checkout Commit (Detached)",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.createBranch",
+        "title": "Create Branch Here…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.reset",
+        "title": "Reset Current Branch to Here…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.revert",
+        "title": "Revert Commit",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.copySha",
+        "title": "Copy Commit SHA",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.copyMessage",
+        "title": "Copy Commit Message",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.openChanges",
+        "title": "Open All Changes",
+        "category": "CodeGit",
+        "icon": "$(diff-multiple)"
+      },
+      {
+        "command": "codegit.openFileDiff",
+        "title": "Open Diff",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.operation.continue",
+        "title": "Continue Rebase/Merge/Cherry-Pick",
+        "category": "CodeGit",
+        "icon": "$(debug-continue)"
+      },
+      {
+        "command": "codegit.operation.abort",
+        "title": "Abort Rebase/Merge/Cherry-Pick",
+        "category": "CodeGit",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "codegit.operation.skip",
+        "title": "Skip Current Commit",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.operation.menu",
+        "title": "Rebase/Merge Options…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.stash.push",
+        "title": "Stash All Changes (Including Untracked)…",
+        "category": "CodeGit",
+        "icon": "$(add)"
+      },
+      {
+        "command": "codegit.stash.pushStaged",
+        "title": "Stash Staged Changes…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.stash.pushKeepIndex",
+        "title": "Stash All Changes, Keep Staged…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.stash.apply",
+        "title": "Apply Stash",
+        "category": "CodeGit",
+        "icon": "$(check)"
+      },
+      {
+        "command": "codegit.stash.pop",
+        "title": "Pop Stash",
+        "category": "CodeGit",
+        "icon": "$(arrow-circle-down)"
+      },
+      {
+        "command": "codegit.stash.drop",
+        "title": "Drop Stash",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.stash.rename",
+        "title": "Rename Stash…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.stash.branch",
+        "title": "Create Branch from Stash…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.markBase",
+        "title": "Mark as Base Commit for Rebase",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.clearBase",
+        "title": "Clear Marked Base Commit",
+        "category": "CodeGit",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "codegit.commit.createTag",
+        "title": "Create Tag Here…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.fetchAll",
+        "title": "Fetch All Remotes",
+        "category": "CodeGit",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "codegit.branch.checkout",
+        "title": "Checkout",
+        "category": "CodeGit",
+        "icon": "$(log-in)"
+      },
+      {
+        "command": "codegit.branch.checkoutPrevious",
+        "title": "Checkout Previous Branch",
+        "category": "CodeGit",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "codegit.branch.create",
+        "title": "New Branch…",
+        "category": "CodeGit",
+        "icon": "$(add)"
+      },
+      {
+        "command": "codegit.branch.delete",
+        "title": "Delete…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.branch.rename",
+        "title": "Rename Branch…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.branch.merge",
+        "title": "Merge into Current Branch…",
+        "category": "CodeGit",
+        "icon": "$(git-merge)"
+      },
+      {
+        "command": "codegit.branch.rebase",
+        "title": "Rebase Current Branch onto This…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.branch.fastForward",
+        "title": "Fast-Forward from Upstream",
+        "category": "CodeGit",
+        "icon": "$(repo-pull)"
+      },
+      {
+        "command": "codegit.branch.setUpstream",
+        "title": "Set Upstream…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.branch.unsetUpstream",
+        "title": "Unset Upstream",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.branch.setAsUpstream",
+        "title": "Set as Upstream of Current Branch",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.branch.push",
+        "title": "Push",
+        "category": "CodeGit",
+        "icon": "$(repo-push)"
+      },
+      {
+        "command": "codegit.branch.forcePush",
+        "title": "Force Push (with Lease)",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.branch.reset",
+        "title": "Reset Current Branch to This…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.branch.compare",
+        "title": "Compare with Current Branch",
+        "category": "CodeGit",
+        "icon": "$(diff-multiple)"
+      },
+      {
+        "command": "codegit.branch.copyName",
+        "title": "Copy Name",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.remote.add",
+        "title": "Add Remote…",
+        "category": "CodeGit",
+        "icon": "$(add)"
+      },
+      {
+        "command": "codegit.remote.fetch",
+        "title": "Fetch",
+        "category": "CodeGit",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "codegit.remote.remove",
+        "title": "Remove Remote",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.remote.rename",
+        "title": "Rename Remote…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.remote.editUrl",
+        "title": "Edit Remote URL…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.remote.copyUrl",
+        "title": "Copy Remote URL",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.tag.create",
+        "title": "New Tag…",
+        "category": "CodeGit",
+        "icon": "$(add)"
+      },
+      {
+        "command": "codegit.tag.delete",
+        "title": "Delete Tag…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.tag.push",
+        "title": "Push Tag…",
+        "category": "CodeGit",
+        "icon": "$(repo-push)"
+      },
+      {
+        "command": "codegit.undo",
+        "title": "Undo Last Git Action",
+        "category": "CodeGit",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "codegit.redo",
+        "title": "Redo Git Action",
+        "category": "CodeGit",
+        "icon": "$(redo)"
+      },
+      {
+        "command": "codegit.commit.autosquash",
+        "title": "Squash Fixup Commits Above This",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.createFixup",
+        "title": "Create Fixup Commit for This",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.amendAuthor",
+        "title": "Amend Author…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.rewordInEditor",
+        "title": "Reword Commit in Editor…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.copy",
+        "title": "Copy…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.openInBrowser",
+        "title": "Open Commit in Browser",
+        "category": "CodeGit",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "codegit.file.removeFromCommit",
+        "title": "Remove Changes from Commit",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.file.moveToIndex",
+        "title": "Move Changes out of Commit (to Index)",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.file.checkout",
+        "title": "Checkout File from This Commit",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.file.openAtRevision",
+        "title": "Open File at Revision",
+        "category": "CodeGit",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "codegit.bisect.markBad",
+        "title": "Bisect: Mark as Bad",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.bisect.markGood",
+        "title": "Bisect: Mark as Good",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.bisect.skip",
+        "title": "Bisect: Skip",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.bisect.reset",
+        "title": "Reset Bisect",
+        "category": "CodeGit",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "codegit.compare.select",
+        "title": "Select for Compare",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.compare.withSelected",
+        "title": "Compare with Selected",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.compare.clear",
+        "title": "Clear Compare Selection",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commits.filterByFile",
+        "title": "Filter Commits by File…",
+        "category": "CodeGit",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "codegit.commits.showFileHistory",
+        "title": "Show File History in CodeGit",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commits.clearFilter",
+        "title": "Clear File Filter",
+        "category": "CodeGit",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "codegit.todo.setAction",
+        "title": "Change Rebase Action…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.todo.moveUp",
+        "title": "Move Up",
+        "category": "CodeGit",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "codegit.todo.moveDown",
+        "title": "Move Down",
+        "category": "CodeGit",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "codegit.branch.createPullRequest",
+        "title": "Create Pull Request",
+        "category": "CodeGit",
+        "icon": "$(git-pull-request-create)"
+      },
+      {
+        "command": "codegit.branch.deleteMerged",
+        "title": "Delete Merged Branches…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.branch.sort",
+        "title": "Sort Branches…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.worktree.add",
+        "title": "New Worktree…",
+        "category": "CodeGit",
+        "icon": "$(add)"
+      },
+      {
+        "command": "codegit.worktree.open",
+        "title": "Open in New Window",
+        "category": "CodeGit",
+        "icon": "$(empty-window)"
+      },
+      {
+        "command": "codegit.worktree.openHere",
+        "title": "Open in This Window",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.worktree.remove",
+        "title": "Remove Worktree…",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.worktree.prune",
+        "title": "Prune Missing Worktrees",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.worktree.copyPath",
+        "title": "Copy Path",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.scm.fetch",
+        "title": "Fetch",
+        "category": "CodeGit",
+        "icon": "$(repo-fetch)"
+      },
+      {
+        "command": "codegit.scm.pull",
+        "title": "Pull",
+        "category": "CodeGit",
+        "icon": "$(repo-pull)"
+      },
+      {
+        "command": "codegit.scm.push",
+        "title": "Push",
+        "category": "CodeGit",
+        "icon": "$(repo-push)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "codegit.fetchAll",
+          "when": "view == codegit.branches",
+          "group": "navigation@1"
+        },
+        {
+          "command": "codegit.branch.create",
+          "when": "view == codegit.branches",
+          "group": "navigation@2"
+        },
+        {
+          "command": "codegit.branch.checkoutPrevious",
+          "when": "view == codegit.branches",
+          "group": "1_branch@1"
+        },
+        {
+          "command": "codegit.remote.add",
+          "when": "view == codegit.branches",
+          "group": "1_branch@2"
+        },
+        {
+          "command": "codegit.tag.create",
+          "when": "view == codegit.branches",
+          "group": "1_branch@3"
+        },
+        {
+          "command": "codegit.commit.clearBase",
+          "when": "view == codegit.commits && codegit.hasRebaseBase",
+          "group": "navigation@5"
+        },
+        {
+          "command": "codegit.operation.continue",
+          "when": "view == codegit.commits && codegit.operation",
+          "group": "navigation@1"
+        },
+        {
+          "command": "codegit.operation.abort",
+          "when": "view == codegit.commits && codegit.operation",
+          "group": "navigation@2"
+        },
+        {
+          "command": "codegit.commit.pasteCherryPick",
+          "when": "view == codegit.commits && codegit.hasCherryPicks",
+          "group": "navigation@3"
+        },
+        {
+          "command": "codegit.commit.clearCherryPick",
+          "when": "view == codegit.commits && codegit.hasCherryPicks",
+          "group": "navigation@4"
+        },
+        {
+          "command": "codegit.stash.push",
+          "when": "view == codegit.stashes",
+          "group": "navigation@1"
+        },
+        {
+          "command": "codegit.stash.pushStaged",
+          "when": "view == codegit.stashes",
+          "group": "stash@1"
+        },
+        {
+          "command": "codegit.stash.pushKeepIndex",
+          "when": "view == codegit.stashes",
+          "group": "stash@2"
+        },
+        {
+          "command": "codegit.switchRepository",
+          "when": "view =~ /^codegit\\./ && codegit.multipleRepos",
+          "group": "navigation@8"
+        },
+        {
+          "command": "codegit.refresh",
+          "when": "view =~ /^codegit\\./",
+          "group": "navigation@9"
+        },
+        {
+          "command": "codegit.undo",
+          "when": "view == codegit.commits",
+          "group": "navigation@6"
+        },
+        {
+          "command": "codegit.redo",
+          "when": "view == codegit.commits",
+          "group": "navigation@7"
+        },
+        {
+          "command": "codegit.commits.filterByFile",
+          "when": "view == codegit.commits && !codegit.commitsFiltered",
+          "group": "navigation@8"
+        },
+        {
+          "command": "codegit.commits.clearFilter",
+          "when": "view == codegit.commits && codegit.commitsFiltered",
+          "group": "navigation@8"
+        },
+        {
+          "command": "codegit.bisect.reset",
+          "when": "view == codegit.commits && codegit.bisecting",
+          "group": "navigation@4"
+        },
+        {
+          "command": "codegit.compare.clear",
+          "when": "view == codegit.commits && codegit.hasCompareBase",
+          "group": "2_compare@1"
+        },
+        {
+          "command": "codegit.branch.deleteMerged",
+          "when": "view == codegit.branches",
+          "group": "2_branch@1"
+        },
+        {
+          "command": "codegit.branch.sort",
+          "when": "view == codegit.branches",
+          "group": "2_branch@2"
+        },
+        {
+          "command": "codegit.worktree.add",
+          "when": "view == codegit.branches",
+          "group": "1_branch@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "codegit.commit.openChanges",
+          "when": "viewItem =~ /^(commit|reflog|refcommit)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "codegit.commit.moveUp",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:head)/",
+          "group": "inline@2"
+        },
+        {
+          "command": "codegit.commit.moveDown",
+          "when": "view == codegit.commits && viewItem =~ /^commit(?!.*:root)/",
+          "group": "inline@3"
+        },
+        {
+          "command": "codegit.commit.squash",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "1_rebase@1"
+        },
+        {
+          "command": "codegit.commit.fixup",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "1_rebase@2"
+        },
+        {
+          "command": "codegit.commit.drop",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "1_rebase@3"
+        },
+        {
+          "command": "codegit.commit.reword",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "1_rebase@4"
+        },
+        {
+          "command": "codegit.commit.edit",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "1_rebase@5"
+        },
+        {
+          "command": "codegit.commit.amendStaged",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "1_rebase@6"
+        },
+        {
+          "command": "codegit.commit.moveUp",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "1_rebase@7"
+        },
+        {
+          "command": "codegit.commit.moveDown",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "1_rebase@8"
+        },
+        {
+          "command": "codegit.commit.copyForCherryPick",
+          "when": "viewItem =~ /^(commit|reflog|refcommit)/",
+          "group": "2_cherry@1"
+        },
+        {
+          "command": "codegit.commit.pasteCherryPick",
+          "when": "view == codegit.commits && codegit.hasCherryPicks",
+          "group": "2_cherry@2"
+        },
+        {
+          "command": "codegit.commit.checkout",
+          "when": "viewItem =~ /^(commit|reflog|refcommit)/",
+          "group": "3_branch@1"
+        },
+        {
+          "command": "codegit.commit.createBranch",
+          "when": "viewItem =~ /^(commit|reflog|refcommit)/",
+          "group": "3_branch@2"
+        },
+        {
+          "command": "codegit.commit.reset",
+          "when": "viewItem =~ /^(commit|reflog|refcommit)/",
+          "group": "3_branch@3"
+        },
+        {
+          "command": "codegit.commit.revert",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "3_branch@4"
+        },
+        {
+          "command": "codegit.commit.copySha",
+          "when": "viewItem =~ /^(commit|reflog|refcommit)/",
+          "group": "4_copy@1"
+        },
+        {
+          "command": "codegit.commit.copyMessage",
+          "when": "viewItem =~ /^(commit|reflog|refcommit)/",
+          "group": "4_copy@2"
+        },
+        {
+          "command": "codegit.stash.apply",
+          "when": "viewItem == stash",
+          "group": "inline@1"
+        },
+        {
+          "command": "codegit.stash.pop",
+          "when": "viewItem == stash",
+          "group": "inline@2"
+        },
+        {
+          "command": "codegit.stash.apply",
+          "when": "viewItem == stash",
+          "group": "1_stash@1"
+        },
+        {
+          "command": "codegit.stash.pop",
+          "when": "viewItem == stash",
+          "group": "1_stash@2"
+        },
+        {
+          "command": "codegit.stash.drop",
+          "when": "viewItem == stash",
+          "group": "1_stash@3"
+        },
+        {
+          "command": "codegit.stash.rename",
+          "when": "viewItem == stash",
+          "group": "2_stash@1"
+        },
+        {
+          "command": "codegit.stash.branch",
+          "when": "viewItem == stash",
+          "group": "2_stash@2"
+        },
+        {
+          "command": "codegit.branch.create",
+          "when": "view == codegit.branches && viewItem == section:local",
+          "group": "inline@1"
+        },
+        {
+          "command": "codegit.fetchAll",
+          "when": "view == codegit.branches && viewItem == section:remotes",
+          "group": "inline@1"
+        },
+        {
+          "command": "codegit.remote.add",
+          "when": "view == codegit.branches && viewItem == section:remotes",
+          "group": "inline@2"
+        },
+        {
+          "command": "codegit.tag.create",
+          "when": "view == codegit.branches && viewItem == section:tags",
+          "group": "inline@1"
+        },
+        {
+          "command": "codegit.branch.checkout",
+          "when": "view == codegit.branches && viewItem =~ /^(branch:local(?!.*:current)|branch:remote|tag$)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "codegit.branch.fastForward",
+          "when": "view == codegit.branches && viewItem =~ /^branch:local.*:upstream/",
+          "group": "inline@2"
+        },
+        {
+          "command": "codegit.branch.push",
+          "when": "view == codegit.branches && viewItem =~ /^branch:local/",
+          "group": "inline@3"
+        },
+        {
+          "command": "codegit.remote.fetch",
+          "when": "view == codegit.branches && viewItem == remote",
+          "group": "inline@1"
+        },
+        {
+          "command": "codegit.branch.checkout",
+          "when": "view == codegit.branches && viewItem =~ /^(branch:local(?!.*:current)|branch:remote|tag$)/",
+          "group": "1_checkout@1"
+        },
+        {
+          "command": "codegit.branch.create",
+          "when": "view == codegit.branches && viewItem =~ /^(branch:|tag$)/",
+          "group": "1_checkout@2"
+        },
+        {
+          "command": "codegit.branch.merge",
+          "when": "view == codegit.branches && viewItem =~ /^(branch:local(?!.*:current)|branch:remote|tag$)/",
+          "group": "2_integrate@1"
+        },
+        {
+          "command": "codegit.branch.rebase",
+          "when": "view == codegit.branches && viewItem =~ /^(branch:local(?!.*:current)|branch:remote|tag$)/",
+          "group": "2_integrate@2"
+        },
+        {
+          "command": "codegit.branch.compare",
+          "when": "view == codegit.branches && viewItem =~ /^(branch:|tag$)/",
+          "group": "2_integrate@3"
+        },
+        {
+          "command": "codegit.branch.fastForward",
+          "when": "view == codegit.branches && viewItem =~ /^branch:local.*:upstream/",
+          "group": "3_sync@1"
+        },
+        {
+          "command": "codegit.branch.push",
+          "when": "view == codegit.branches && viewItem =~ /^branch:local/",
+          "group": "3_sync@2"
+        },
+        {
+          "command": "codegit.branch.forcePush",
+          "when": "view == codegit.branches && viewItem =~ /^branch:local/",
+          "group": "3_sync@3"
+        },
+        {
+          "command": "codegit.branch.setUpstream",
+          "when": "view == codegit.branches && viewItem =~ /^branch:local/",
+          "group": "3_sync@4"
+        },
+        {
+          "command": "codegit.branch.unsetUpstream",
+          "when": "view == codegit.branches && viewItem =~ /^branch:local.*:upstream/",
+          "group": "3_sync@5"
+        },
+        {
+          "command": "codegit.branch.setAsUpstream",
+          "when": "view == codegit.branches && viewItem == branch:remote",
+          "group": "3_sync@6"
+        },
+        {
+          "command": "codegit.tag.push",
+          "when": "view == codegit.branches && viewItem == tag",
+          "group": "3_sync@7"
+        },
+        {
+          "command": "codegit.branch.rename",
+          "when": "view == codegit.branches && viewItem =~ /^branch:local/",
+          "group": "4_manage@1"
+        },
+        {
+          "command": "codegit.branch.delete",
+          "when": "view == codegit.branches && viewItem =~ /^(branch:local(?!.*:current)|branch:remote)/",
+          "group": "4_manage@2"
+        },
+        {
+          "command": "codegit.tag.delete",
+          "when": "view == codegit.branches && viewItem == tag",
+          "group": "4_manage@3"
+        },
+        {
+          "command": "codegit.tag.create",
+          "when": "view == codegit.branches && viewItem =~ /^(branch:|tag$)/",
+          "group": "4_manage@4"
+        },
+        {
+          "command": "codegit.branch.reset",
+          "when": "view == codegit.branches && viewItem =~ /^(branch:|tag$)/",
+          "group": "4_manage@5"
+        },
+        {
+          "command": "codegit.branch.copyName",
+          "when": "view == codegit.branches && viewItem =~ /^(branch:|tag$)/",
+          "group": "5_copy@1"
+        },
+        {
+          "command": "codegit.remote.fetch",
+          "when": "view == codegit.branches && viewItem == remote",
+          "group": "1_remote@1"
+        },
+        {
+          "command": "codegit.remote.rename",
+          "when": "view == codegit.branches && viewItem == remote",
+          "group": "2_remote@1"
+        },
+        {
+          "command": "codegit.remote.editUrl",
+          "when": "view == codegit.branches && viewItem == remote",
+          "group": "2_remote@2"
+        },
+        {
+          "command": "codegit.remote.copyUrl",
+          "when": "view == codegit.branches && viewItem == remote",
+          "group": "2_remote@3"
+        },
+        {
+          "command": "codegit.remote.remove",
+          "when": "view == codegit.branches && viewItem == remote",
+          "group": "2_remote@4"
+        },
+        {
+          "command": "codegit.commit.markBase",
+          "when": "viewItem =~ /^(commit|refcommit)/",
+          "group": "1_rebase@9"
+        },
+        {
+          "command": "codegit.commit.createTag",
+          "when": "viewItem =~ /^(commit|reflog|refcommit)/",
+          "group": "3_branch@3"
+        },
+        {
+          "command": "codegit.commit.rewordInEditor",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "1b_amend@1"
+        },
+        {
+          "command": "codegit.commit.amendAuthor",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "1b_amend@2"
+        },
+        {
+          "command": "codegit.commit.createFixup",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "1b_amend@3"
+        },
+        {
+          "command": "codegit.commit.autosquash",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "1b_amend@4"
+        },
+        {
+          "command": "codegit.bisect.markBad",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "6_bisect@1"
+        },
+        {
+          "command": "codegit.bisect.markGood",
+          "when": "view == codegit.commits && viewItem =~ /^commit/",
+          "group": "6_bisect@2"
+        },
+        {
+          "command": "codegit.bisect.skip",
+          "when": "view == codegit.commits && viewItem =~ /^commit/ && codegit.bisecting",
+          "group": "6_bisect@3"
+        },
+        {
+          "command": "codegit.bisect.reset",
+          "when": "view == codegit.commits && viewItem =~ /^commit/ && codegit.bisecting",
+          "group": "6_bisect@4"
+        },
+        {
+          "command": "codegit.compare.select",
+          "when": "viewItem =~ /^(commit|reflog|refcommit)/",
+          "group": "7_compare@1"
+        },
+        {
+          "command": "codegit.compare.withSelected",
+          "when": "viewItem =~ /^(commit|reflog|refcommit)/ && codegit.hasCompareBase",
+          "group": "7_compare@2"
+        },
+        {
+          "command": "codegit.compare.select",
+          "when": "view == codegit.branches && viewItem =~ /^(branch:|tag$)/",
+          "group": "7_compare@1"
+        },
+        {
+          "command": "codegit.compare.withSelected",
+          "when": "view == codegit.branches && viewItem =~ /^(branch:|tag$)/ && codegit.hasCompareBase",
+          "group": "7_compare@2"
+        },
+        {
+          "command": "codegit.commit.copy",
+          "when": "viewItem =~ /^(commit|reflog|refcommit)/",
+          "group": "4_copy@3"
+        },
+        {
+          "command": "codegit.commit.openInBrowser",
+          "when": "viewItem =~ /^(commit|reflog|refcommit)/",
+          "group": "4_copy@4"
+        },
+        {
+          "command": "codegit.todo.moveUp",
+          "when": "view == codegit.commits && viewItem == todo",
+          "group": "inline@1"
+        },
+        {
+          "command": "codegit.todo.moveDown",
+          "when": "view == codegit.commits && viewItem == todo",
+          "group": "inline@2"
+        },
+        {
+          "command": "codegit.todo.setAction",
+          "when": "view == codegit.commits && viewItem == todo",
+          "group": "1_todo@1"
+        },
+        {
+          "command": "codegit.todo.moveUp",
+          "when": "view == codegit.commits && viewItem == todo",
+          "group": "1_todo@2"
+        },
+        {
+          "command": "codegit.todo.moveDown",
+          "when": "view == codegit.commits && viewItem == todo",
+          "group": "1_todo@3"
+        },
+        {
+          "command": "codegit.file.openAtRevision",
+          "when": "viewItem =~ /^file:/",
+          "group": "inline@1"
+        },
+        {
+          "command": "codegit.file.openAtRevision",
+          "when": "viewItem =~ /^file:/",
+          "group": "1_file@1"
+        },
+        {
+          "command": "codegit.file.checkout",
+          "when": "viewItem =~ /^file:(log|commit)$/",
+          "group": "1_file@2"
+        },
+        {
+          "command": "codegit.file.removeFromCommit",
+          "when": "view == codegit.commits && viewItem == file:log",
+          "group": "2_patch@1"
+        },
+        {
+          "command": "codegit.file.moveToIndex",
+          "when": "view == codegit.commits && viewItem == file:log",
+          "group": "2_patch@2"
+        },
+        {
+          "command": "codegit.branch.createPullRequest",
+          "when": "view == codegit.branches && viewItem =~ /^branch:/",
+          "group": "3_sync@8"
+        },
+        {
+          "command": "codegit.worktree.add",
+          "when": "view == codegit.branches && viewItem =~ /^branch:/",
+          "group": "1_checkout@3"
+        },
+        {
+          "command": "codegit.worktree.add",
+          "when": "view == codegit.branches && viewItem == section:worktrees",
+          "group": "inline@1"
+        },
+        {
+          "command": "codegit.worktree.prune",
+          "when": "view == codegit.branches && viewItem == section:worktrees",
+          "group": "1_worktree@1"
+        },
+        {
+          "command": "codegit.worktree.open",
+          "when": "view == codegit.branches && viewItem =~ /^worktree/ && viewItem =~ /^worktree(?!.*:current)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "codegit.worktree.open",
+          "when": "view == codegit.branches && viewItem =~ /^worktree/ && viewItem =~ /^worktree(?!.*:current)/",
+          "group": "1_worktree@1"
+        },
+        {
+          "command": "codegit.worktree.openHere",
+          "when": "view == codegit.branches && viewItem =~ /^worktree/ && viewItem =~ /^worktree(?!.*:current)/",
+          "group": "1_worktree@2"
+        },
+        {
+          "command": "codegit.worktree.copyPath",
+          "when": "view == codegit.branches && viewItem =~ /^worktree/",
+          "group": "2_worktree@1"
+        },
+        {
+          "command": "codegit.worktree.remove",
+          "when": "view == codegit.branches && viewItem =~ /^worktree(?!.*:(main|current))/",
+          "group": "3_worktree@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "codegit.commit.squash",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.fixup",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.drop",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.reword",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.edit",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.amendStaged",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.moveUp",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.moveDown",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.copyForCherryPick",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.checkout",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.createBranch",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.reset",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.revert",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.copySha",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.copyMessage",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.openChanges",
+          "when": "false"
+        },
+        {
+          "command": "codegit.openFileDiff",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.pasteCherryPick",
+          "when": "codegit.hasCherryPicks"
+        },
+        {
+          "command": "codegit.commit.clearCherryPick",
+          "when": "codegit.hasCherryPicks"
+        },
+        {
+          "command": "codegit.operation.continue",
+          "when": "codegit.operation"
+        },
+        {
+          "command": "codegit.operation.abort",
+          "when": "codegit.operation"
+        },
+        {
+          "command": "codegit.operation.skip",
+          "when": "codegit.operation == rebase || codegit.operation == cherry-pick || codegit.operation == revert"
+        },
+        {
+          "command": "codegit.operation.menu",
+          "when": "codegit.operation"
+        },
+        {
+          "command": "codegit.stash.apply",
+          "when": "false"
+        },
+        {
+          "command": "codegit.stash.pop",
+          "when": "false"
+        },
+        {
+          "command": "codegit.stash.drop",
+          "when": "false"
+        },
+        {
+          "command": "codegit.stash.rename",
+          "when": "false"
+        },
+        {
+          "command": "codegit.stash.branch",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.markBase",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.createTag",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.checkout",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.delete",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.rename",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.merge",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.rebase",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.fastForward",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.setUpstream",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.unsetUpstream",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.setAsUpstream",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.push",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.forcePush",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.reset",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.compare",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.copyName",
+          "when": "false"
+        },
+        {
+          "command": "codegit.remote.fetch",
+          "when": "false"
+        },
+        {
+          "command": "codegit.remote.remove",
+          "when": "false"
+        },
+        {
+          "command": "codegit.remote.rename",
+          "when": "false"
+        },
+        {
+          "command": "codegit.remote.editUrl",
+          "when": "false"
+        },
+        {
+          "command": "codegit.remote.copyUrl",
+          "when": "false"
+        },
+        {
+          "command": "codegit.tag.delete",
+          "when": "false"
+        },
+        {
+          "command": "codegit.tag.push",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.clearBase",
+          "when": "codegit.hasRebaseBase"
+        },
+        {
+          "command": "codegit.commit.autosquash",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.createFixup",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.amendAuthor",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.rewordInEditor",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.copy",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.openInBrowser",
+          "when": "false"
+        },
+        {
+          "command": "codegit.file.removeFromCommit",
+          "when": "false"
+        },
+        {
+          "command": "codegit.file.moveToIndex",
+          "when": "false"
+        },
+        {
+          "command": "codegit.file.checkout",
+          "when": "false"
+        },
+        {
+          "command": "codegit.file.openAtRevision",
+          "when": "false"
+        },
+        {
+          "command": "codegit.bisect.markBad",
+          "when": "false"
+        },
+        {
+          "command": "codegit.bisect.markGood",
+          "when": "false"
+        },
+        {
+          "command": "codegit.bisect.skip",
+          "when": "false"
+        },
+        {
+          "command": "codegit.compare.select",
+          "when": "false"
+        },
+        {
+          "command": "codegit.compare.withSelected",
+          "when": "false"
+        },
+        {
+          "command": "codegit.todo.setAction",
+          "when": "false"
+        },
+        {
+          "command": "codegit.todo.moveUp",
+          "when": "false"
+        },
+        {
+          "command": "codegit.todo.moveDown",
+          "when": "false"
+        },
+        {
+          "command": "codegit.branch.createPullRequest",
+          "when": "false"
+        },
+        {
+          "command": "codegit.worktree.open",
+          "when": "false"
+        },
+        {
+          "command": "codegit.worktree.openHere",
+          "when": "false"
+        },
+        {
+          "command": "codegit.worktree.remove",
+          "when": "false"
+        },
+        {
+          "command": "codegit.worktree.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "codegit.bisect.reset",
+          "when": "codegit.bisecting"
+        },
+        {
+          "command": "codegit.compare.clear",
+          "when": "codegit.hasCompareBase"
+        },
+        {
+          "command": "codegit.commits.clearFilter",
+          "when": "codegit.commitsFiltered"
+        },
+        {
+          "command": "codegit.scm.fetch",
+          "when": "false"
+        },
+        {
+          "command": "codegit.scm.pull",
+          "when": "false"
+        },
+        {
+          "command": "codegit.scm.push",
+          "when": "false"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "codegit.commits.showFileHistory",
+          "when": "!explorerResourceIsRoot",
+          "group": "9_codegit@1"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "codegit.commits.showFileHistory",
+          "when": "resourceScheme == file",
+          "group": "9_codegit@1"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "codegit.scm.fetch",
+          "group": "navigation@1",
+          "when": "scmProvider == git && config.codegit.showSyncButtons"
+        },
+        {
+          "command": "codegit.scm.pull",
+          "group": "navigation@2",
+          "when": "scmProvider == git && config.codegit.showSyncButtons"
+        },
+        {
+          "command": "codegit.scm.push",
+          "group": "navigation@3",
+          "when": "scmProvider == git && config.codegit.showSyncButtons"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node esbuild.mjs && node esbuild.mjs --tests && node --test \"out-test/**/*.test.js\"",
+    "vscode:prepublish": "npm run typecheck && node esbuild.mjs --production",
+    "package": "vsce package",
+    "smoke": "node scripts/smoke.mjs",
+    "playground": "node scripts/playground.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "~1.90.0",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.6.0"
+  },
+  "allowScripts": {
+    "@vscode/vsce-sign@2.1.0": true,
+    "keytar@7.9.0": true,
+    "esbuild@0.28.2": true
+  }
+}
