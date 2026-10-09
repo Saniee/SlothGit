@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { fromGraph } from './views/graphPanel';
 import type { GitOps } from './git/operations';
 import { commitUrl, toWebRepo, type WebRepo } from './git/hosting';
+import { removalPatch, type LineRange, type Side } from './git/patch';
 import { getCommitMessage, getOperation, getRemotes, type Operation } from './git/queries';
 import type { Git } from './git/runner';
 import type { RepoManager } from './repoManager';
@@ -25,6 +26,8 @@ export interface CommandDeps {
 export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   const { repos, commits, commitsView, stashView, clipboard, runner } = deps;
   const { run, confirm } = runner;
+
+  const patchContext = vscode.window.onDidChangeActiveTextEditor(updatePatchContext);
 
   // --- target resolution ----------------------------------------------------
 
@@ -256,6 +259,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
 
     'codegit.file.removeFromCommit': (arg?: Node, all?: Node[]) => removeFiles(false, arg, all),
     'codegit.file.moveToIndex': (arg?: Node, all?: Node[]) => removeFiles(true, arg, all),
+    'codegit.patch.remove': () => patchSelection('discard'),
+    'codegit.patch.moveToIndex': () => patchSelection('index'),
+    'codegit.patch.moveToNewCommit': () => patchSelection('newCommit'),
     'codegit.file.checkout': async (arg?: Node) => {
       const node = resolve<FileNode>('file', commitsView, arg)[0];
       if (!node?.commit) return;
@@ -348,6 +354,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       const root = repos.repository?.rootUri;
       if (!root) return;
       const { left, right } = diffUris(repos, node);
+      rememberCommitDiff(node, left, right);
       const title = `${path.posix.basename(node.pair.change.path)} (${node.label})`;
       await loadDocuments(`Loading ${path.posix.basename(node.pair.change.path)}…`, existingSides({ left, right }, node));
       await vscode.commands.executeCommand('vscode.diff', left, right, title, { preview: true });
@@ -441,6 +448,63 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     );
   }
 
+  /**
+   * Line-level version of removeFiles: takes the changes selected in a commit's file diff out of the commit.
+   * An empty selection takes the change block under the cursor.
+   */
+  async function patchSelection(target: 'discard' | 'index' | 'newCommit'): Promise<void> {
+    const editor = vscode.window.activeTextEditor;
+    const diff = editor && commitDiffs.get(editor.document.uri.toString());
+    const commit = diff?.file.commit;
+    const ops = repos.ops();
+    if (!editor || !diff || !commit || !ops) {
+      void vscode.window.showInformationMessage(
+        'Open a file diff from the Commits view, select the changed lines to take out of the commit, and try again.',
+      );
+      return;
+    }
+    if (!(await canRewrite([commit]))) return;
+    const ranges: LineRange[] = editor.selections.map((s) => {
+      if (s.isEmpty) return { start: s.active.line + 1, end: s.active.line + 1, whole: true };
+      // A selection that ends at the start of a line doesn't include that line.
+      const end = s.end.character === 0 && s.end.line > s.start.line ? s.end.line : s.end.line + 1;
+      return { start: s.start.line + 1, end };
+    });
+    let patch: string | undefined;
+    try {
+      patch = removalPatch(await ops.commitFileDiff(commit.sha, diff.file.pair.change), diff.side, ranges);
+    } catch (error) {
+      void vscode.window.showWarningMessage(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    if (!patch) {
+      void vscode.window.showInformationMessage(
+        `The selection has no changes from ${commit.shortSha}. Select changed lines, or put the cursor on a change.`,
+      );
+      return;
+    }
+    const name = path.posix.basename(diff.file.pair.change.path);
+    let newCommit: string | undefined;
+    if (target === 'newCommit') {
+      newCommit = await vscode.window.showInputBox({
+        title: `New commit after ${commit.shortSha} with the selected changes to ${name}`,
+        value: commit.subject,
+        validateInput: (v) => (v.trim() ? undefined : 'The message cannot be empty.'),
+      });
+      if (newCommit === undefined) return;
+    } else {
+      const question =
+        target === 'index'
+          ? `Take the selected changes to ${name} out of ${commit.shortSha} and stage them in your working tree?`
+          : `Discard the selected changes to ${name} from ${commit.shortSha}? Later commits touching those lines may conflict.`;
+      if (!(await confirm(question, target === 'index' ? 'Move to Index' : 'Remove'))) return;
+    }
+    if (!(await confirmRewrite([commit]))) return;
+    const where = newCommit !== undefined ? { newCommit } : (target as 'discard' | 'index');
+    const title = { discard: 'Removing changes from commit…', index: 'Moving changes out of commit…', newCommit: 'Moving changes to a new commit…' }[target];
+    await run(title, (ops) => ops.removePatchFromCommit(commit.sha, patch!, where));
+  }
+
   function setBase(sha: string | undefined): void {
     commits.baseSha = sha;
     void vscode.commands.executeCommand('setContext', 'codegit.hasRebaseBase', !!sha);
@@ -453,7 +517,32 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   }
 
   // fromGraph: the graph panel's context menu passes a webview context instead of a node.
-  return Object.entries(commands).map(([id, handler]) => vscode.commands.registerCommand(id, (...args: unknown[]) => handler(...fromGraph(args))));
+  return [
+    patchContext,
+    ...Object.entries(commands).map(([id, handler]) => vscode.commands.registerCommand(id, (...args: unknown[]) => handler(...fromGraph(args)))),
+  ];
+}
+
+/**
+ * The sides of commit file diffs CodeGit opened, by document URI, so the line-level patch commands know which
+ * commit and side an editor shows. Only for the Commits view, whose history can be rewritten.
+ */
+const commitDiffs = new Map<string, { file: FileNode; side: Side }>();
+const MAX_COMMIT_DIFFS = 500;
+
+function rememberCommitDiff(file: FileNode, left: vscode.Uri, right: vscode.Uri): void {
+  if (file.commit?.source !== 'log') return;
+  for (const [uri, side] of [[left, 'old'], [right, 'new']] as const) {
+    const key = uri.toString();
+    commitDiffs.delete(key);
+    commitDiffs.set(key, { file, side });
+  }
+  while (commitDiffs.size > MAX_COMMIT_DIFFS) commitDiffs.delete(commitDiffs.keys().next().value!);
+}
+
+function updatePatchContext(editor: vscode.TextEditor | undefined): void {
+  const known = !!editor && commitDiffs.has(editor.document.uri.toString());
+  void vscode.commands.executeCommand('setContext', 'codegit.inCommitDiff', known);
 }
 
 export function diffUris(repos: RepoManager, node: FileNode) {
@@ -475,6 +564,7 @@ export async function openMultiDiff(repos: RepoManager, title: string, files: Fi
   }
   const resources = files.map((f) => {
     const { left, right, uri } = diffUris(repos, f);
+    rememberCommitDiff(f, left, right);
     // Like the Git extension: no original for added files, no modified for deleted ones.
     const { status } = f.pair.change;
     return [uri, status === 'A' ? undefined : left, status === 'D' ? undefined : right];

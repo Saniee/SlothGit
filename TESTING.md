@@ -64,6 +64,7 @@ Tick off what you tried and note anything odd, such as wrong labels, missing ref
 - [ ] Reset soft / mixed / hard, checkout, revert, branch or tag here
 - [ ] Copy… (each item), open in browser
 - [ ] Commit files: open diff, open at revision, checkout file, remove from commit, move to index, Open All Changes
+- [ ] Line-level patches in a commit's diff (both sides, cursor only, several selections, Open All Changes): remove, move to index, move to new commit
 - [ ] Filter by file (toolbar, Explorer context menu, editor tab context menu), clear filter
 - [ ] Search by message, author and SHA; clear search
 - [ ] All branches: other branches' commits are dimmed and can't be rewritten

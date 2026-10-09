@@ -504,6 +504,21 @@
         "category": "CodeGit"
       },
       {
+        "command": "codegit.patch.remove",
+        "title": "Remove Selected Changes from Commit",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.patch.moveToIndex",
+        "title": "Move Selected Changes out of Commit (to Index)",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.patch.moveToNewCommit",
+        "title": "Move Selected Changes to New Commit",
+        "category": "CodeGit"
+      },
+      {
         "command": "codegit.file.checkout",
         "title": "Checkout File from This Commit",
         "category": "CodeGit"
@@ -1293,6 +1308,18 @@
       ],
       "commandPalette": [
         {
+          "command": "codegit.patch.remove",
+          "when": "codegit.inCommitDiff"
+        },
+        {
+          "command": "codegit.patch.moveToIndex",
+          "when": "codegit.inCommitDiff"
+        },
+        {
+          "command": "codegit.patch.moveToNewCommit",
+          "when": "codegit.inCommitDiff"
+        },
+        {
           "command": "codegit.commit.squash",
           "when": "false"
         },
@@ -1634,6 +1661,23 @@
           "command": "codegit.commits.showFileHistory",
           "when": "!explorerResourceIsRoot",
           "group": "9_codegit@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "codegit.patch.remove",
+          "when": "codegit.inCommitDiff",
+          "group": "9_codegit@1"
+        },
+        {
+          "command": "codegit.patch.moveToIndex",
+          "when": "codegit.inCommitDiff",
+          "group": "9_codegit@2"
+        },
+        {
+          "command": "codegit.patch.moveToNewCommit",
+          "when": "codegit.inCommitDiff",
+          "group": "9_codegit@3"
         }
       ],
       "editor/title/context": [

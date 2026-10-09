@@ -57,6 +57,14 @@ Rewrite history straight from the commit list, with no todo file to edit by hand
 
 Expand a commit to see its files. For each file you can open the diff or the file at that revision, or check the file out from that commit. You can also **remove its changes from the commit**, or **move them out of the commit into the index**, which is lazygit's custom-patch "move patch out" at file level. Use **Open All Changes** to see a whole commit in the multi-diff editor.
 
+**Line-level patches:** in a commit's file diff (opened from the Commits view, including **Open All Changes**), select changed lines on either side and right-click:
+
+- **Remove Selected Changes from Commit** discards them from the commit.
+- **Move Selected Changes out of Commit (to Index)** takes them out and stages them in your working tree.
+- **Move Selected Changes to New Commit** splits them into a new commit right after the original.
+
+With no selection, the change under the cursor is used. As with VS Code's **Stage Selected Ranges**, selecting some lines of a changed block also takes the lines they replaced. Later commits that touch the same lines may conflict; Continue / Abort work as for other rewrites.
+
 **Merge commits:** rewrites work across merges. When the commits being rewritten include merges, CodeGit rebases with `--rebase-merges`, so the merges are recreated and the branch structure stays the same. A recreated merge is merged again, so conflicts that were resolved in it come back, and changes made by hand in the merge itself are lost. Changes that would break the structure are refused before anything happens: squashing a commit into one on another branch, or moving a commit past a merge. A merge commit itself can't be dropped, reworded or edited yet, except the newest commit, which can be amended. During a paused rebase, merge steps are listed with the other steps but can't be changed.
 
 Commit icons are green when the commit is already on the upstream branch and yellow when it isn't. CodeGit asks for confirmation before rewriting pushed commits.
@@ -118,6 +126,5 @@ The tag must match `version` in `package.json`. Tags with a suffix, such as `v0.
 
 ## Roadmap ideas
 
-- Line/hunk-level custom patches from old commits (file level is done)
 - Submodules
 - Custom commands (lazygit's `customCommands`)

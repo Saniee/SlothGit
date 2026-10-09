@@ -739,6 +739,43 @@ scenario('file: check out from a commit', async (t) => {
   assert.equal(t.read('config.json'), '{ "debug": false }\n');
 });
 
+scenario('patch: take selected lines out of a commit from its diff', async (t) => {
+  await t.cleanTree();
+  const write = (content: string) => fs.writeFileSync(path.join(t.repo, 'lines.txt'), content);
+  write('a\nb\nc\nd\ne\nf\ng\nh\n');
+  t.sh('add', 'lines.txt');
+  t.sh('commit', '-q', '-m', 'Add lines');
+  write('a\nb\nC\nd\ne\nN1\nN2\nf\ng\nh\n');
+  t.sh('commit', '-q', '-am', 'Change lines');
+  fs.writeFileSync(path.join(t.repo, 'later.txt'), 'later\n');
+  t.sh('add', 'later.txt');
+  t.sh('commit', '-q', '-m', 'Later');
+  await t.refresh();
+
+  const commitSide = (text: string) =>
+    waitFor('the commit side of the diff', () => {
+      const editor = vscode.window.activeTextEditor;
+      return editor?.document.uri.scheme === 'git' && editor.document.getText().includes(text) ? editor : undefined;
+    });
+
+  // Select the two inserted lines and move them to a new commit.
+  await t.run('codegit.openFileDiff', [await t.file(await t.commit('Change lines'), 'lines.txt')]);
+  const editor = await commitSide('N1');
+  editor.selection = new vscode.Selection(5, 0, 6, 2);
+  await t.run('codegit.patch.moveToNewCommit', [], [input('Insert N lines', /New commit after/)]);
+  assert.deepEqual(t.subjects(3), ['Later', 'Insert N lines', 'Change lines']);
+  assert.equal(t.sh('show', 'HEAD~2:lines.txt'), 'a\nb\nC\nd\ne\nf\ng\nh');
+  assert.equal(t.read('lines.txt'), 'a\nb\nC\nd\ne\nN1\nN2\nf\ng\nh\n', 'the end result is unchanged');
+
+  // With only a cursor on the changed line, that change is taken out and the original line comes back.
+  await t.run('codegit.openFileDiff', [await t.file(await t.commit('Change lines'), 'lines.txt')]);
+  const rewritten = await commitSide('C\nd\ne\nf');
+  rewritten.selection = new vscode.Selection(2, 0, 2, 0);
+  await t.run('codegit.patch.remove', [], [button('Remove', /Discard the selected changes to lines.txt/)]);
+  assert.equal(t.sh('show', 'HEAD~2:lines.txt'), 'a\nb\nc\nd\ne\nf\ng\nh');
+  assert.deepEqual(t.subjects(3), ['Later', 'Insert N lines', 'Change lines']);
+});
+
 scenario('file: open diff and open at revision', async (t) => {
   const file = await t.file(await t.commit('Add settings page'), 'settings.txt');
   await t.run('codegit.openFileDiff', [file]);

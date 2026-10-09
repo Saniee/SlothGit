@@ -14,6 +14,7 @@ import {
 } from './queries';
 import { Git } from './runner';
 import { REWORD_MESSAGES_FILE, transformTodo, type RebasePlan, type TodoAction } from './todo';
+import { parseFileDiff, type FileDiff } from './patch';
 import { planUndo, REDO_MARKER, UNDO_MARKER, type UndoAction, type UndoPlan } from './undo';
 
 const ROOT = '--root';
@@ -246,15 +247,63 @@ export class GitOps {
       await this.git.exec(['commit', '--amend', '--no-edit', '--allow-empty', '--no-verify']);
     });
 
-    if (patchFile) {
-      try {
-        await this.git.exec(['apply', '--3way', patchFile]);
-        fs.rmSync(patchFile, { force: true });
-      } catch (error) {
-        const reason = error instanceof Error ? error.message.split('\n')[0] : String(error);
-        return `The changes were removed from the commit but could not be applied to your working tree (${reason}). They are saved in ${patchFile}.`;
-      }
+    if (patchFile) return this.applyToWorkingTree(patchFile);
+  }
+
+  /** Path of a scratch file in the git directory. */
+  private async gitFile(name: string): Promise<string> {
+    return path.resolve(this.git.cwd, (await this.git.run(['rev-parse', '--git-path', name])).trim());
+  }
+
+  /** Applies changes taken out of a commit to the index and working tree; if that fails, says where they are kept. */
+  private async applyToWorkingTree(patchFile: string): Promise<string | void> {
+    try {
+      await this.git.exec(['apply', '--3way', patchFile]);
+      fs.rmSync(patchFile, { force: true });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message.split('\n')[0] : String(error);
+      return `The changes were removed from the commit but could not be applied to your working tree (${reason}). They are saved in ${patchFile}.`;
     }
+  }
+
+  /** `git diff` of one file of commit `sha`, parsed for building partial patches (see patch.ts). */
+  async commitFileDiff(sha: string, change: FileChange): Promise<FileDiff> {
+    const parent = (await this.hasParent(sha)) ? `${sha}^` : EMPTY_TREE;
+    const paths = change.oldPath ? [change.oldPath, change.path] : [change.path];
+    const diff = await this.git.run([
+      'diff', '--no-color', '--no-ext-diff', '-M', '-U3', '--src-prefix=a/', '--dst-prefix=b/', parent, sha, '--', ...paths,
+    ]);
+    return parseFileDiff(diff, change.path);
+  }
+
+  /**
+   * Takes the changes in `patch` (from removalPatch) out of commit `sha` (lazygit's custom patch, at line level).
+   * 'index' then applies them to the index and working tree; 'newCommit' commits them right after `sha`.
+   */
+  async removePatchFromCommit(
+    sha: string,
+    patch: string,
+    target: 'discard' | 'index' | { newCommit: string },
+  ): Promise<string | void> {
+    const patchFile = await this.gitFile('codegit-patch.patch');
+    const restoreFile = await this.gitFile('codegit-uncommit.patch');
+    fs.writeFileSync(patchFile, patch);
+    try {
+      await this.atCommit(sha, async () => {
+        await this.git.exec(['apply', '--index', '--recount', patchFile]);
+        await this.git.exec(['commit', '--amend', '--no-edit', '--allow-empty', '--no-verify']);
+        if (target === 'discard') return;
+        // Exactly what was taken out, with blob ids, so it can be applied with a 3-way merge later.
+        fs.writeFileSync(restoreFile, await this.git.run(['diff', '--binary', 'HEAD', sha]));
+        if (target === 'index') return;
+        await this.git.exec(['apply', '--index', restoreFile]);
+        fs.rmSync(restoreFile, { force: true });
+        await this.git.exec(['commit', '-m', target.newCommit]);
+      });
+    } finally {
+      fs.rmSync(patchFile, { force: true });
+    }
+    if (target === 'index') return this.applyToWorkingTree(restoreFile);
   }
 
   /** Overwrites a file in the working tree and index with its version from `sha`. */

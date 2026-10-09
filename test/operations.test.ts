@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import { buildEditorCommand, GitOps } from '../src/git/operations';
 import { getOperation, getRebaseTodo, getStashes, getStashFiles } from '../src/git/queries';
 import { Git } from '../src/git/runner';
+import { removalPatch, type LineRange } from '../src/git/patch';
 import { pendingRewordMessage } from '../src/git/todo';
 
 const editorScript = path.resolve(__dirname, '../dist/rebaseEditor.js');
@@ -169,6 +170,57 @@ test('conflicting rebase stops and can be aborted', async () => {
   await r.ops.abortOperation('rebase');
   assert.equal(await getOperation(r.git), undefined);
   assert.equal(r.sh('rev-parse', 'HEAD'), before);
+});
+
+// --- line-level patches ------------------------------------------------------------------
+
+function setupPatch() {
+  const r = setup(1);
+  r.write('x.txt', 'a\nb\nc\nd\ne\nf\ng\nh\n');
+  r.sh('add', '.');
+  r.sh('commit', '-q', '-m', 'base');
+  r.write('x.txt', 'a\nb\nC\nd\ne\nN1\nN2\nf\ng\n');
+  r.sh('add', '.');
+  r.sh('commit', '-q', '-m', 'change');
+  // A later commit touching another part of the file, so the rebase has to carry it over.
+  r.write('x.txt', 'a\nb\nC\nd\ne\nN1\nN2\nf\ng\nlast\n');
+  r.sh('add', '.');
+  r.sh('commit', '-q', '-m', 'later');
+  const change = { status: 'M', path: 'x.txt' };
+  const patchFor = async (sha: string, ranges: LineRange[]) =>
+    removalPatch(await r.ops.commitFileDiff(sha, change), 'new', ranges)!;
+  return { ...r, patchFor };
+}
+
+test('patch: remove selected lines from an older commit', async () => {
+  const r = setupPatch();
+  const sha = r.sha('change');
+  r.write('other.txt', 'dirty\n');
+  await r.ops.removePatchFromCommit(sha, await r.patchFor(sha, [{ start: 6, end: 6, whole: true }]), 'discard');
+  assert.deepEqual(r.subjects(), ['later', 'change', 'base', 'c1']);
+  assert.equal(r.sh('show', `${r.sha('change')}:x.txt`), 'a\nb\nC\nd\ne\nf\ng');
+  assert.equal(r.read('x.txt'), 'a\nb\nC\nd\ne\nf\ng\nlast\n');
+  assert.equal(r.read('other.txt'), 'dirty\n', 'uncommitted changes are kept');
+});
+
+test('patch: move selected lines to the index', async () => {
+  const r = setupPatch();
+  const sha = r.sha('change');
+  const message = await r.ops.removePatchFromCommit(sha, await r.patchFor(sha, [{ start: 3, end: 3 }]), 'index');
+  assert.equal(message, undefined);
+  assert.equal(r.sh('show', `${r.sha('change')}:x.txt`), 'a\nb\nc\nd\ne\nN1\nN2\nf\ng');
+  assert.equal(r.sh('show', 'HEAD:x.txt'), 'a\nb\nc\nd\ne\nN1\nN2\nf\ng\nlast');
+  assert.equal(r.read('x.txt'), 'a\nb\nC\nd\ne\nN1\nN2\nf\ng\nlast\n', 'the change is back in the working tree');
+  assert.match(r.sh('diff', '--cached'), /-c\n\+C/, 'and staged');
+});
+
+test('patch: move selected lines to a new commit after the original', async () => {
+  const r = setupPatch();
+  const sha = r.sha('change');
+  await r.ops.removePatchFromCommit(sha, await r.patchFor(sha, [{ start: 6, end: 7 }]), { newCommit: 'insert N lines' });
+  assert.deepEqual(r.subjects(), ['later', 'insert N lines', 'change', 'base', 'c1']);
+  assert.equal(r.sh('show', `${r.sha('change')}:x.txt`), 'a\nb\nC\nd\ne\nf\ng');
+  assert.equal(r.sh('show', 'HEAD:x.txt'), 'a\nb\nC\nd\ne\nN1\nN2\nf\ng\nlast', 'the end result is unchanged');
 });
 
 // --- history with a merge ------------------------------------------------------------
