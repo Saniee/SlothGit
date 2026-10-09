@@ -6,7 +6,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
 import { buildEditorCommand, GitOps } from '../src/git/operations';
-import { getLocalBranches, getOperation, getRemoteBranches, getRemotes, getTags, parseTrack } from '../src/git/queries';
+import { getLocalBranches, getOperation, getRebaseTodo, getRemoteBranches, getRemotes, getTags, parseTrack } from '../src/git/queries';
 import { GitError, Git } from '../src/git/runner';
 
 function git(cwd: string, ...args: string[]): string {
@@ -146,6 +146,32 @@ test('rebase onto a branch, and onto with a marked base', async () => {
   const a1 = r.sh('rev-parse', 'feature-a');
   await r.ops.rebaseOnto('main', a1);
   assert.deepEqual(r.subjects(), ['b1', 'm1', 'c1']);
+});
+
+test('interactive rebase onto a branch pauses before applying anything', async () => {
+  const r = setup();
+  r.sh('switch', '-q', '-c', 'feat');
+  r.commit('f1.txt', '1\n', 'f1');
+  r.commit('f2.txt', '2\n', 'f2');
+  r.sh('switch', '-q', 'main');
+  r.commit('m.txt', 'm\n', 'm1');
+  r.sh('switch', '-q', 'feat');
+  fs.writeFileSync(path.join(r.dir, 'a.txt'), 'uncommitted\n');
+
+  await r.ops.rebaseOnto('main', undefined, true);
+  assert.equal(await getOperation(r.git), 'rebase');
+  assert.equal(r.sh('rev-parse', 'HEAD'), r.sh('rev-parse', 'main'));
+  assert.deepEqual((await getRebaseTodo(r.git)).map((t) => t.subject), ['f1', 'f2']);
+
+  await r.ops.continueOperation('rebase');
+  assert.equal(await getOperation(r.git), undefined);
+  assert.deepEqual(r.subjects(), ['f2', 'f1', 'm1', 'c1']);
+  assert.equal(fs.readFileSync(path.join(r.dir, 'a.txt'), 'utf8'), 'uncommitted\n', 'autostash restored the change');
+
+  // Nothing to move: refused before git starts.
+  r.sh('switch', '-q', 'main');
+  await assert.rejects(r.ops.rebaseOnto('feat', undefined, true), /no commits to rebase/);
+  assert.equal(await getOperation(r.git), undefined);
 });
 
 test('rebase with conflicts stops and is detected', async () => {

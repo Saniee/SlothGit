@@ -9,6 +9,8 @@ export interface RebasePlan {
   move?: { sha: string; direction: 'up' | 'down' };
   /** Move `sha` directly after `target` and mark it as a fixup. */
   fixupInto?: { sha: string; target: string };
+  /** Stop before the first step (a `break` line), so the steps can be changed before anything is applied. */
+  pauseFirst?: boolean;
 }
 
 const COMMIT_LINE = /^(pick|p|reword|r|edit|e|squash|s|fixup|f|drop|d)(\s+)([0-9a-fA-F]{4,64})\b(.*)$/;
@@ -76,6 +78,12 @@ export function transformTodo(todo: string, plan: RebasePlan): string {
     const line = render(i, 'fixup');
     lines.splice(i, 1);
     lines.splice(i < target ? target : target + 1, 0, line);
+  }
+
+  if (plan.pauseFirst) {
+    const first = lines.findIndex((line) => COMMIT_LINE.test(line));
+    if (first < 0) throw new Error('there are no commits to rebase');
+    lines.splice(first, 0, 'break');
   }
 
   return lines.join(eol);

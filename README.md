@@ -1,6 +1,6 @@
 # CodeGit
 
-Lazygit-inspired power tools that fill the gaps in VS Code's built-in Git support. CodeGit adds four views to the Source Control sidebar (Branches, Commits, Stashes and Reflog) and builds on the built-in Git extension (same repositories, same diff editors) rather than replacing it. File staging stays with VS Code's own Changes view.
+Lazygit-inspired power tools that fill the gaps in VS Code's built-in Git support. CodeGit adds four views to the Source Control sidebar (Branches, Commits, Reflog and Stashes, in lazygit's order) and builds on the built-in Git extension (same repositories, same diff editors) rather than replacing it. File staging stays with VS Code's own Changes view.
 
 ## Features
 
@@ -34,6 +34,8 @@ Push, fetch and remote deletes go through VS Code's built-in Git extension, so i
 - **Whole branch:** right-click the target branch (e.g. `origin/main`) and pick **Rebase Current Branch onto This**.
 - **Only your commits** (your branch was cut from another feature branch): in the Commits view, right-click the last commit that is *not* yours and pick **Mark as Base Commit for Rebase**. Then run **Rebase Current Branch onto This** on the target and choose **Rebase from Marked Base**. This is `git rebase --onto <target> <base>`.
 
+- **Interactive:** pick **Interactive Rebase** (or **Interactive Rebase from Marked Base**). The rebase pauses before the first commit is applied and lists the steps at the top of the Commits view. Reorder them, or change each to pick, squash, fixup, edit or drop, then **Continue**. **Abort** leaves the branch as it was.
+
 CodeGit warns before rebasing commits that are already pushed. Conflicts are handled the same way as for other rewrites (see below).
 
 ### Commits view
@@ -59,7 +61,7 @@ Commit icons are green when the commit is already on the upstream branch and yel
 
 All rewrites use `git rebase --interactive --autostash`, so a dirty working tree is fine. When a rebase stops (on conflicts, or at a commit you chose to edit), the status bar and the view toolbar offer **Continue / Skip / Abort**. The remaining rebase steps appear at the top of the Commits view, where you can reorder them or change their action (pick, squash, fixup, edit, drop) before continuing.
 
-Each commit shows its SHA, branches and tags, author and relative date; the tooltip has the full date and email. Merge commits get a merge icon.
+Each commit shows its SHA, author initials and message, as in lazygit, followed by its relative date, branches and tags. In a narrow view only the end of the message is cut off; the tooltip has the full message, author, date and email. Merge commits get a merge icon.
 
 **Search:** the search button matches text in the message or author name (case-insensitive), or a SHA prefix. Squash and move are disabled while searching, since the neighbouring commits are hidden.
 
@@ -115,7 +117,6 @@ The tag must match `version` in `package.json`. Tags with a suffix, such as `v0.
 ## Roadmap ideas
 
 - Line/hunk-level custom patches from old commits (file level is done)
-- Interactive rebase onto a branch (plan the todo list before starting)
 - Rewriting history that contains merge commits (`--rebase-merges`)
 - Submodules
 - Custom commands (lazygit's `customCommands`)

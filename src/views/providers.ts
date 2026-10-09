@@ -23,6 +23,21 @@ export function config<T>(key: string, fallback: T): T {
   return vscode.workspace.getConfiguration('codegit').get<T>(key, fallback);
 }
 
+/** "Ada Lovelace" -> "AL", as lazygit shows authors. */
+export function initials(name: string | undefined): string {
+  const parts = (name ?? '').split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+
+/**
+ * lazygit-style label: SHA and author first, then the subject. Tree items can't wrap and VS Code cuts off the end
+ * of a row, so only the subject gets shortened in a narrow view; the tooltip has everything.
+ */
+export function commitLabel(node: CommitNode, withAuthor = true): string {
+  return withAuthor ? `${node.shortSha} ${initials(node.author)}  ${node.subject}` : `${node.shortSha}  ${node.subject}`;
+}
+
 export async function commitFiles(git: Git, node: CommitNode): Promise<FileNode[]> {
   const pairs = await getCommitFiles(git, node.sha, node.parents[0]);
   return pairs.map((pair) => ({ kind: 'file', pair, label: node.shortSha, commit: node }));
@@ -118,10 +133,9 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
   protected item(n: Node): vscode.TreeItem {
     if (n.kind === 'todo') return this.todoItem(n);
     const node = n as CommitNode;
-    const item = new vscode.TreeItem(node.subject, vscode.TreeItemCollapsibleState.Collapsed);
+    const item = new vscode.TreeItem(commitLabel(node), vscode.TreeItemCollapsibleState.Collapsed);
     item.id = `log:${node.sha}`;
-    const refs = node.refs?.length ? `(${node.refs.join(', ')}) ` : '';
-    item.description = `${node.shortSha} ${refs}· ${node.author}, ${node.relDate}`;
+    item.description = [node.relDate, ...(node.refs ?? [])].join(' · ');
 
     const pushed = this.isPushed(node.sha);
     const copied = this.clipboard.has(node.sha);
@@ -207,9 +221,9 @@ export class ReflogProvider extends BaseProvider<CommitNode> {
 
   protected item(n: Node): vscode.TreeItem {
     const node = n as CommitNode;
-    const item = new vscode.TreeItem(node.subject, vscode.TreeItemCollapsibleState.Collapsed);
+    const item = new vscode.TreeItem(commitLabel(node, false), vscode.TreeItemCollapsibleState.Collapsed);
     item.id = `reflog:${node.index}:${node.sha}`;
-    item.description = `${node.shortSha} · ${node.relDate}`;
+    item.description = node.relDate;
     item.tooltip = `${node.selector}  ${node.sha}\n${node.subject}`;
     item.iconPath = new vscode.ThemeIcon('history');
     item.contextValue = 'reflog';

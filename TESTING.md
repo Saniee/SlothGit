@@ -46,6 +46,7 @@ Tick off what you tried and note anything odd, such as wrong labels, missing ref
 - [ ] Checkout, checkout previous, new branch, rename, delete (local / remote / both; unmerged asks to force)
 - [ ] Merge: regular, `--no-ff`, squash
 - [ ] Rebase onto, plain and with a marked base
+- [ ] Interactive rebase onto, plain and with a marked base: pauses first, change / reorder steps, Continue or Abort
 - [ ] Fast-forward, set / unset upstream, set remote branch as upstream
 - [ ] Push, force push with lease, fetch, fetch all
 - [ ] Compare with current, reset current to this, copy name

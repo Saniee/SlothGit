@@ -50,7 +50,10 @@ export function graphHtml(webview: vscode.Webview): string {
   }
   header button:hover { background: var(--vscode-button-secondaryHoverBackground); }
   header .status { margin-left: auto; color: var(--vscode-descriptionForeground); white-space: nowrap; }
-  .columns, .row { display: grid; grid-template-columns: var(--graph-width, 40px) minmax(200px, 1fr) 160px 110px 72px; align-items: center; }
+  /* The graph column is at least as wide as its header, however few lanes there are. */
+  .columns, .row { display: grid; grid-template-columns: max(var(--graph-width, 40px), 56px) minmax(200px, 1fr) 160px 110px 72px; align-items: center; }
+  .columns > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .columns > span + span { padding-left: 8px; }
   .columns {
     padding: 0 10px; height: 24px; color: var(--vscode-descriptionForeground);
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
@@ -63,7 +66,7 @@ export function graphHtml(webview: vscode.Webview): string {
   #list:focus .row.selected { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
   .row.other .subject, .row.other .author, .row.other .date { opacity: 0.6; }
   .row svg { display: block; overflow: visible; }
-  .desc { display: flex; gap: 4px; align-items: center; overflow: hidden; min-width: 0; }
+  .desc { display: flex; gap: 4px; align-items: center; overflow: hidden; min-width: 0; padding-left: 8px; }
   .subject { overflow: hidden; text-overflow: ellipsis; }
   .row.head .subject { font-weight: 600; }
   .pill {

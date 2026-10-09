@@ -85,15 +85,15 @@
           "icon": "$(git-commit)"
         },
         {
-          "id": "codegit.stashes",
-          "name": "Stashes",
-          "icon": "$(archive)"
-        },
-        {
           "id": "codegit.reflog",
           "name": "Reflog",
           "icon": "$(history)",
           "visibility": "collapsed"
+        },
+        {
+          "id": "codegit.stashes",
+          "name": "Stashes",
+          "icon": "$(archive)"
         }
       ]
     },

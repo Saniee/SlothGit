@@ -177,7 +177,7 @@ scenario('branch: merge conflict, resolve and continue', async (t) => {
 
 scenario('branch: rebase current branch onto another', async (t) => {
   await t.checkout('feature/search');
-  await t.run('codegit.branch.rebase', [await t.localBranch('main')], [button('Rebase', /Rebase feature\/search onto main/)]);
+  await t.run('codegit.branch.rebase', [await t.localBranch('main')], [pick('Simple Rebase', /Rebase feature\/search onto main/)]);
   assert.equal(t.sh('rev-list', '--count', 'main..HEAD'), '4');
   assert.equal(t.sh('merge-base', 'main', 'HEAD'), t.rev('main'));
 });
@@ -185,14 +185,14 @@ scenario('branch: rebase current branch onto another', async (t) => {
 scenario('branch: rebase conflict, abort from the prompt', async (t) => {
   await t.checkout('conflict/status-line');
   const before = t.rev('HEAD');
-  await t.run('codegit.branch.rebase', [await t.localBranch('main')], [button('Rebase'), button('Abort', /Rebase stopped/)]);
+  await t.run('codegit.branch.rebase', [await t.localBranch('main')], [pick('Simple Rebase'), button('Abort', /Rebase stopped/)]);
   assert.ok(!t.operationInProgress(), 'the rebase was aborted');
   assert.equal(t.rev('HEAD'), before);
 });
 
 scenario('branch: rebase conflict, continue from the prompt after resolving', async (t) => {
   await t.checkout('conflict/status-line');
-  await t.run('codegit.branch.rebase', [await t.localBranch('main')], [button('Rebase'), dismiss(/Rebase stopped/)]);
+  await t.run('codegit.branch.rebase', [await t.localBranch('main')], [pick('Simple Rebase'), dismiss(/Rebase stopped/)]);
   assert.ok(t.operationInProgress());
   fs.writeFileSync(path.join(t.repo, 'app.txt'), RESOLVED_APP);
   t.sh('add', 'app.txt');
@@ -211,9 +211,33 @@ scenario('branch: rebase only the commits after a marked base', async (t) => {
   assert.equal(t.rev('HEAD~2'), t.rev('main'));
 });
 
+scenario('branch: interactive rebase pauses first so steps can be changed', async (t) => {
+  await t.checkout('feature/search');
+  await t.run('codegit.branch.rebase', [await t.localBranch('main')], [pick('Interactive Rebase')]);
+  assert.ok(t.operationInProgress(), 'the rebase is paused');
+  assert.equal(t.rev('HEAD'), t.rev('main'), 'nothing is applied yet');
+  const todos = await t.todos();
+  assert.deepEqual(todos.map((n) => n.subject), ['Add sorting', 'fixup! Add search', 'Add filters', 'Add search']);
+  await t.run('codegit.todo.setAction', [todos[0]], [pick('drop')]);
+  await t.run('codegit.operation.continue');
+  assert.ok(!t.operationInProgress());
+  assert.deepEqual(t.subjects(3), ['fixup! Add search', 'Add filters', 'Add search']);
+  assert.equal(t.rev('HEAD~3'), t.rev('main'));
+});
+
+scenario('branch: interactive rebase from a marked base', async (t) => {
+  await t.checkout('feature/login-ui');
+  await t.run('codegit.commit.markBase', [await t.commit('Login: error messages')]);
+  await t.run('codegit.branch.rebase', [await t.localBranch('main')], [pick('Interactive Rebase from Marked Base')]);
+  assert.deepEqual((await t.todos()).map((n) => n.subject), ['Login UI: colors', 'Login UI: layout']);
+  await t.run('codegit.operation.continue');
+  assert.deepEqual(t.subjects(2), ['Login UI: colors', 'Login UI: layout']);
+  assert.equal(t.rev('HEAD~2'), t.rev('main'));
+});
+
 scenario('branch: rebasing pushed commits warns', async (t) => {
   await t.checkout('feature/login');
-  await t.run('codegit.branch.rebase', [await t.localBranch('main')], [button('Rebase'), button('Rebase', /already pushed/)]);
+  await t.run('codegit.branch.rebase', [await t.localBranch('main')], [pick('Simple Rebase'), button('Rebase', /already pushed/)]);
   assert.equal(t.rev('HEAD~3'), t.rev('main'));
 });
 
@@ -754,8 +778,11 @@ scenario('commits: all branches lists other branches, which cannot be rewritten'
   await t.cleanTree();
   await t.run('codegit.commit.createBranch', [sorting], [input('from-sorting')]);
   assert.equal(t.rev('from-sorting'), sorting.sha);
+  // from-sorting is now checked out, so the view lists exactly its history again.
   await t.run('codegit.commits.showCurrentBranch');
-  assert.ok(!(await subjectsShown(t)).includes('Add sorting'));
+  const shown = await t.commits();
+  assert.ok(shown.every((c) => c.onHead !== false), 'no other-branch commits');
+  assert.deepEqual(shown.map((c) => c.subject), t.subjects(shown.length));
 });
 
 scenario('commits: merge commits are marked', async (t) => {

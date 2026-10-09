@@ -241,27 +241,35 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
         void vscode.window.showInformationMessage('Pick a different branch to rebase the current branch onto.');
         return;
       }
+      // lazygit's rebase menu: simple or interactive, each also from the marked base commit when there is one.
       const base = commits.baseSha;
-      let useBase = false;
+      const options: (vscode.QuickPickItem & { useBase: boolean; interactive: boolean })[] = [
+        { label: 'Simple Rebase', description: `Move every commit not on ${node.name}`, useBase: false, interactive: false },
+        {
+          label: 'Interactive Rebase',
+          description: 'Pause first to reorder, squash or drop commits',
+          useBase: false,
+          interactive: true,
+        },
+      ];
       if (base) {
-        const picked = await vscode.window.showQuickPick(
-          [
-            {
-              label: 'Rebase from Marked Base',
-              description: `Move only the commits after ${base.slice(0, 7)}`,
-              useBase: true,
-            },
-            { label: 'Simple Rebase', description: `Move every commit not on ${node.name}`, useBase: false },
-          ],
-          { title: `Rebase ${currentLabel()} onto ${node.name}` },
+        const after = `the commits after ${base.slice(0, 7)}`;
+        options.unshift(
+          { label: 'Rebase from Marked Base', description: `Move only ${after}`, useBase: true, interactive: false },
+          { label: 'Interactive Rebase from Marked Base', description: `Plan ${after} first`, useBase: true, interactive: true },
         );
-        if (!picked) return;
-        useBase = picked.useBase;
-      } else if (!(await confirm(`Rebase ${currentLabel()} onto ${node.name}?`, 'Rebase'))) {
-        return;
       }
+      const picked = await vscode.window.showQuickPick(options, { title: `Rebase ${currentLabel()} onto ${node.name}` });
+      if (!picked) return;
+      const { useBase, interactive } = picked;
       if (!(await confirmPushedRewrite(useBase ? base! : node.rev))) return;
-      const ok = await run(`Rebasing onto ${node.name}…`, (ops) => ops.rebaseOnto(node.rev, useBase ? base : undefined));
+      const ok = await run(`Rebasing onto ${node.name}…`, async (ops) => {
+        await ops.rebaseOnto(node.rev, useBase ? base : undefined, interactive);
+        if (interactive) {
+          void vscode.commands.executeCommand('codegit.commits.focus');
+          return 'Rebase paused before the first commit. Change or reorder the steps at the top of the Commits view, then Continue.';
+        }
+      });
       if (ok && useBase) await vscode.commands.executeCommand('codegit.commit.clearBase');
     },
 

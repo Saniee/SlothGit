@@ -39,3 +39,9 @@ test('leaves non-commit lines alone', () => {
   const out = transformTodo(withRefs, { actions: { [B]: 'squash' } });
   assert.equal(out, 'pick aaaaaaa first\nupdate-ref refs/heads/x\nsquash bbbbbbb second\n');
 });
+
+test('pauses before the first step', () => {
+  const out = transformTodo(todo, { pauseFirst: true, actions: { [A]: 'reword' } });
+  assert.deepEqual(out.split('\n').slice(0, 4), ['break', 'reword aaaaaaa first', 'pick bbbbbbb second', 'pick ccccccc third']);
+  assert.throws(() => transformTodo('noop\n', { pauseFirst: true }), /no commits to rebase/);
+});

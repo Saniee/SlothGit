@@ -72,7 +72,7 @@ export class GitOps {
   private async rebase(
     base: string,
     plan: RebasePlan,
-    options: { message?: string; autosquash?: boolean } = {},
+    options: { message?: string; autosquash?: boolean; onto?: string } = {},
   ): Promise<void> {
     await this.assertNoMerges(base);
     const env: Record<string, string> = {
@@ -82,7 +82,8 @@ export class GitOps {
     };
     if (options.message !== undefined) env.CODEGIT_COMMIT_MESSAGE = options.message;
     const autosquash = options.autosquash ? '--autosquash' : '--no-autosquash';
-    await this.git.exec(['rebase', '--interactive', '--autostash', autosquash, base], { env });
+    const range = options.onto ? ['--onto', options.onto, base] : [base];
+    await this.git.exec(['rebase', '--interactive', '--autostash', autosquash, ...range], { env });
   }
 
   /**
@@ -303,8 +304,17 @@ export class GitOps {
     await this.git.exec(['merge', ...flags, ref], { env: { GIT_EDITOR: ':' } });
   }
 
-  /** Rebase the current branch onto `target`; with `base`, only the commits after `base` are moved (`--onto`). */
-  async rebaseOnto(target: string, base?: string): Promise<void> {
+  /**
+   * Rebase the current branch onto `target`; with `base`, only the commits after `base` are moved (`--onto`).
+   * `interactive` stops before the first commit is applied, so the todo list can be changed first.
+   */
+  async rebaseOnto(target: string, base?: string, interactive = false): Promise<void> {
+    if (interactive) {
+      const count = parseInt(await this.git.run(['rev-list', '--count', `${base ?? target}..HEAD`]), 10);
+      if (count === 0) throw new UserError('There are no commits to rebase: the current branch has no commits that are not on the target.');
+      await this.rebase(base ?? target, { pauseFirst: true }, base ? { onto: target } : {});
+      return;
+    }
     const args = base ? ['--onto', target, base] : [target];
     await this.git.exec(['rebase', '--autostash', ...args], { env: { GIT_EDITOR: ':' } });
   }
