@@ -235,6 +235,14 @@ scenario('branch: interactive rebase from a marked base', async (t) => {
   assert.equal(t.rev('HEAD~2'), t.rev('main'));
 });
 
+scenario('commit: rewriting a stacked branch moves the branch it is stacked on', async (t) => {
+  await vscode.workspace.getConfiguration('codegit').update('updateStackedBranches', 'always', vscode.ConfigurationTarget.Global);
+  await t.checkout('feature/login-ui');
+  await t.run('codegit.commit.reword', [await t.commit('Login: validate input')], [input('Login: validate all input')]);
+  assert.deepEqual(t.subjects(3, 'feature/login'), ['Login: error messages', 'Login: remember me', 'Login: validate all input']);
+  assert.equal(t.rev('HEAD~2'), t.rev('feature/login'), 'feature/login-ui is still stacked on it');
+});
+
 scenario('branch: rebasing pushed commits warns', async (t) => {
   await t.checkout('feature/login');
   await t.run('codegit.branch.rebase', [await t.localBranch('main')], [pick('Simple Rebase'), button('Rebase', /already pushed/)]);

@@ -67,6 +67,8 @@ With no selection, the change under the cursor is used. As with VS Code's **Stag
 
 **Merge commits:** rewrites work across merges. When the commits being rewritten include merges, CodeGit rebases with `--rebase-merges`, so the merges are recreated and the branch structure stays the same. A recreated merge is merged again, so conflicts that were resolved in it come back, and changes made by hand in the merge itself are lost. Changes that would break the structure are refused before anything happens: squashing a commit into one on another branch, or moving a commit past a merge. A merge commit itself can't be dropped, reworded or edited yet, except the newest commit, which can be amended. During a paused rebase, merge steps are listed with the other steps but can't be changed.
 
+**Stacked branches:** with `codegit.updateStackedBranches` set to `always` (or git's `rebase.updateRefs` turned on, which the default setting follows), rewriting history also moves other local branches that point at the rewritten commits, like lazygit. That keeps a branch stacked on another one stacked after you change the lower one. A paused rebase lists these branch updates with the other steps, and moving a commit across one moves the commit into that branch. Branches checked out in another worktree are left alone, and undo only moves the current branch back.
+
 Commit icons are green when the commit is already on the upstream branch and yellow when it isn't. CodeGit asks for confirmation before rewriting pushed commits.
 
 All rewrites use `git rebase --interactive --autostash`, so a dirty working tree is fine. When a rebase stops (on conflicts, or at a commit you chose to edit), the status bar and the view toolbar offer **Continue / Skip / Abort**. The remaining rebase steps appear at the top of the Commits view, where you can reorder them or change their action (pick, reword, squash, fixup, edit, drop) before continuing. Reword asks for the new message right away and applies it when the rebase gets to that commit.
@@ -115,14 +117,14 @@ Press `F5` to launch an Extension Development Host.
 Pushing a version tag builds the extension, runs the tests and attaches the `.vsix` to a GitHub Release (see `.github/workflows/release.yml`). Nothing is published to the Marketplace.
 
 ```bash
-git tag v0.1.0
+git tag 0.1.0
 ```
 
 ```bash
-git push origin v0.1.0
+git push origin 0.1.0
 ```
 
-The tag must match `version` in `package.json`. Tags with a suffix, such as `v0.1.0-beta.1`, become pre-releases. Install a release with **Extensions: Install from VSIX…**.
+The tag must match `version` in `package.json`, with or without a `v` in front. Tags with a suffix, such as `0.1.0-beta.1`, become pre-releases. Install a release with **Extensions: Install from VSIX…**.
 
 ## Roadmap ideas
 

@@ -3,6 +3,9 @@
 // With --rebase-merges the list also has `label`, `reset` and `merge` lines that rebuild the branch structure.
 // Those are never changed here, and changes that would cross them (squashing into another branch's commit,
 // moving a commit past a merge or a branch point) are refused, which makes git abort the rebase.
+//
+// With --update-refs (stacked branches) it has `update-ref` lines, each after the commit that branch points at.
+// Moving a commit across one moves the commit into the other branch, and leaves the other commit where it was.
 
 export type TodoAction = 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
 
@@ -22,6 +25,8 @@ const COMMIT_LINE = /^(pick|p|reword|r|edit|e|squash|s|fixup|f|drop|d)(\s+)([0-9
 const MERGE_LINE = /^(?:merge|m)\s+(?:-[cC]\s+([0-9a-fA-F]{4,64})\s+)?(\S+)(.*)$/;
 /** Lines that rebuild the branch structure; HEAD jumps at them, so commits can't be squashed or moved across. */
 const STRUCTURE_LINE = /^(label|l|reset|t|merge|m)\s/;
+/** `update-ref refs/heads/<branch>`: points that branch at the commit applied just before. */
+const UPDATE_REF_LINE = /^(?:update-ref|u)\s+(\S+)/;
 
 interface CommitLine {
   sha: string;
@@ -34,23 +39,30 @@ const ACTION_NAMES: Record<string, TodoAction> = {
 };
 
 export interface TodoEntry {
-  /** 'merge' steps recreate a merge commit; they are shown but can't be changed. */
-  action: TodoAction | 'merge';
-  /** Abbreviated SHA as written in the todo list; for a merge, the original merge commit's (may be empty). */
+  /**
+   * 'merge' steps recreate a merge commit and 'update-ref' steps move a stacked branch; they are shown but can't
+   * be changed.
+   */
+  action: TodoAction | 'merge' | 'update-ref';
+  /** Abbreviated SHA as written in the todo list; for a merge, the original merge commit's (may be empty). Empty for update-ref. */
   sha: string;
   subject: string;
+  /** For update-ref: the branch's full ref name. */
+  ref?: string;
 }
 
 /** "rest" is " <subject>" or " # <subject>" depending on git version. */
 const subjectOf = (rest: string) => rest.replace(/^\s*(#\s*)?/, '');
 
-/** Commit and merge lines of a rebase todo list, in file order (the next one to apply first). */
+/** Commit, merge and update-ref lines of a rebase todo list, in file order (the next one to apply first). */
 export function parseTodo(todo: string): TodoEntry[] {
   return todo.split(/\r?\n/).flatMap((line): TodoEntry[] => {
     const m = COMMIT_LINE.exec(line);
     if (m) return [{ action: ACTION_NAMES[m[1]], sha: m[3].toLowerCase(), subject: subjectOf(m[4]) }];
     const merge = MERGE_LINE.exec(line);
     if (merge) return [{ action: 'merge', sha: merge[1]?.toLowerCase() ?? '', subject: subjectOf(merge[3]) || `Merge ${merge[2]}` }];
+    const ref = UPDATE_REF_LINE.exec(line)?.[1];
+    if (ref) return [{ action: 'update-ref', sha: '', subject: `Update branch ${ref.replace(/^refs\/heads\//, '')}`, ref }];
     return [];
   });
 }
@@ -64,7 +76,7 @@ export const REWORD_MESSAGES_FILE = 'codegit-messages.json';
  */
 export function pendingRewordMessage(done: string, messages: Record<string, string>): string | undefined {
   const entries = parseTodo(done);
-  const current = entries[entries.length - 1];
+  const current = entries.filter((e) => e.action !== 'update-ref').pop();
   if (current?.action !== 'reword') return undefined;
   const sha = Object.keys(messages).find((full) => full.toLowerCase().startsWith(current.sha));
   return sha === undefined ? undefined : messages[sha];
@@ -115,7 +127,14 @@ export function transformTodo(todo: string, plan: RebasePlan): string {
     if (structureBetween(i, other)) {
       throw new Error(`cannot move commit ${plan.move.sha.slice(0, 10)} ${plan.move.direction} past a merge or branch point`);
     }
-    [lines[i], lines[other]] = [lines[other], lines[i]];
+    const between = lines.slice(Math.min(i, other) + 1, Math.max(i, other));
+    if (between.some((line) => UPDATE_REF_LINE.test(line))) {
+      // Into the neighbouring branch: next to `other`, on this side of it.
+      const [line] = lines.splice(i, 1);
+      lines.splice(i < other ? other - 1 : other + 1, 0, line);
+    } else {
+      [lines[i], lines[other]] = [lines[other], lines[i]];
+    }
   }
 
   if (plan.fixupInto) {

@@ -321,4 +321,39 @@ describe('operations', { concurrency }, () => {
     assert.equal(r.read('new.txt'), 'untracked\n');
     assert.equal((await getStashes(r.git)).length, 0);
   });
+
+  // --- stacked branches -------------------------------------------------------------------
+
+  test('stacked branches move along with the rewrite when enabled', async () => {
+    const r = setup();
+    r.sh('branch', 'lower', r.sha('c2'));
+    const stacked = new GitOps(r.git, buildEditorCommand(process.execPath, editorScript), { updateStackedBranches: 'always' });
+    await stacked.reword(r.sha('c1'), 'c1 reworded');
+    assert.deepEqual(r.sh('log', '--format=%s', 'lower').split('\n'), ['c2', 'c1 reworded'], 'lower follows');
+    assert.equal(r.sh('merge-base', '--is-ancestor', 'lower', 'main') === '', true);
+
+    // c3 moves down across lower's tip, into lower.
+    await stacked.move(r.sha('c3'), 'down');
+    assert.deepEqual(r.sh('log', '--format=%s', 'lower').split('\n'), ['c3', 'c2', 'c1 reworded']);
+    assert.deepEqual(r.subjects(), ['c4', 'c3', 'c2', 'c1 reworded']);
+
+    // The paused rebase lists the branch update.
+    await stacked.rebaseOnto(r.sha('c1 reworded'), undefined, true);
+    const todo = await getRebaseTodo(r.git);
+    assert.deepEqual(
+      todo.map((t) => t.action),
+      ['pick', 'pick', 'update-ref', 'pick'],
+    );
+    assert.equal(todo[2].ref, 'refs/heads/lower');
+    await stacked.abortOperation('rebase');
+  });
+
+  test('stacked branches stay put when disabled', async () => {
+    const r = setup();
+    r.sh('branch', 'lower', r.sha('c2'));
+    const before = r.sh('rev-parse', 'lower');
+    const unstacked = new GitOps(r.git, buildEditorCommand(process.execPath, editorScript), { updateStackedBranches: 'never' });
+    await unstacked.reword(r.sha('c1'), 'c1 reworded');
+    assert.equal(r.sh('rev-parse', 'lower'), before);
+  });
 });

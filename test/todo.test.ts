@@ -85,3 +85,24 @@ test('pauses before the first step', () => {
   assert.deepEqual(out.split('\n').slice(0, 4), ['break', 'reword aaaaaaa first', 'pick bbbbbbb second', 'pick ccccccc third']);
   assert.throws(() => transformTodo('noop\n', { pauseFirst: true }), /no commits to rebase/);
 });
+
+test('stacked branches: update-ref steps are listed, and moving a commit across one moves it to that branch', () => {
+  // first is the tip of branch x, which the current branch is stacked on.
+  const stacked = 'pick aaaaaaa first\nupdate-ref refs/heads/x\n\npick bbbbbbb second\npick ccccccc third\n';
+  assert.deepEqual(parseTodo(stacked)[1], { action: 'update-ref', sha: '', subject: 'Update branch x', ref: 'refs/heads/x' });
+  assert.equal(
+    transformTodo(stacked, { move: { sha: A, direction: 'up' } }),
+    'update-ref refs/heads/x\n\npick aaaaaaa first\npick bbbbbbb second\npick ccccccc third\n',
+    'first leaves x',
+  );
+  assert.equal(
+    transformTodo(stacked, { move: { sha: B, direction: 'down' } }),
+    'pick aaaaaaa first\npick bbbbbbb second\nupdate-ref refs/heads/x\n\npick ccccccc third\n',
+    'second joins x',
+  );
+  assert.equal(
+    transformTodo(stacked, { move: { sha: C, direction: 'down' } }),
+    'pick aaaaaaa first\nupdate-ref refs/heads/x\n\npick ccccccc third\npick bbbbbbb second\n',
+    'within a branch, commits swap as usual',
+  );
+});

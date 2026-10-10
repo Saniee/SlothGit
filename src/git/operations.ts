@@ -36,12 +36,26 @@ export class UserError extends Error {}
 
 export type ResetMode = 'soft' | 'mixed' | 'hard';
 
+export interface OpsOptions {
+  /**
+   * Whether rebases also move branches stacked on the rewritten commits (`--update-refs`). 'gitConfig' leaves it
+   * to git's rebase.updateRefs setting.
+   */
+  updateStackedBranches?: 'gitConfig' | 'always' | 'never';
+}
+
 /** History-rewriting and housekeeping operations. Callers are expected to refresh UI afterwards. */
 export class GitOps {
   constructor(
     readonly git: Git,
     private readonly editorCommand: string,
+    private readonly options: OpsOptions = {},
   ) {}
+
+  private updateRefsFlags(): string[] {
+    const mode = this.options.updateStackedBranches ?? 'gitConfig';
+    return mode === 'always' ? ['--update-refs'] : mode === 'never' ? ['--no-update-refs'] : [];
+  }
 
   // --- interactive rebase -------------------------------------------------
 
@@ -106,7 +120,7 @@ export class GitOps {
     if (options.message !== undefined) env.CODEGIT_COMMIT_MESSAGE = options.message;
     const autosquash = options.autosquash ? '--autosquash' : '--no-autosquash';
     const range = options.onto ? ['--onto', options.onto, base] : [base];
-    await this.git.exec(['rebase', '--interactive', '--autostash', autosquash, ...merges, ...range], { env });
+    await this.git.exec(['rebase', '--interactive', '--autostash', autosquash, ...merges, ...this.updateRefsFlags(), ...range], { env });
   }
 
   /**
@@ -386,7 +400,7 @@ export class GitOps {
       return;
     }
     const args = base ? ['--onto', target, base] : [target];
-    await this.git.exec(['rebase', '--autostash', ...args], { env: { GIT_EDITOR: ':' } });
+    await this.git.exec(['rebase', '--autostash', ...this.updateRefsFlags(), ...args], { env: { GIT_EDITOR: ':' } });
   }
 
   /**

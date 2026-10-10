@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { buildEditorCommand, GitOps } from './git/operations';
+import { buildEditorCommand, GitOps, type OpsOptions } from './git/operations';
 import { Git } from './git/runner';
 import { repoSignature } from './git/signature';
 import type { API, Repository } from './types/git';
@@ -45,7 +45,8 @@ export class RepoManager implements vscode.Disposable {
 
   ops(): GitOps | undefined {
     const git = this.git();
-    return git && new GitOps(git, this.editorCommand);
+    const updateStackedBranches = vscode.workspace.getConfiguration('codegit').get<OpsOptions['updateStackedBranches']>('updateStackedBranches');
+    return git && new GitOps(git, this.editorCommand, { updateStackedBranches });
   }
 
   /** Call when the views (re)load, so later state events that change nothing they show don't reload them again. */

@@ -47,6 +47,8 @@ export interface TodoNode {
   /** Abbreviated SHA as written in the todo list. */
   sha: string;
   subject: string;
+  /** For update-ref steps: the stacked branch's full ref name. */
+  ref?: string;
 }
 
 export interface WorktreeNode {

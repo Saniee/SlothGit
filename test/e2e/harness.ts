@@ -208,9 +208,9 @@ export class Context {
       await vscode.commands.executeCommand(id);
     }
     const settings = vscode.workspace.getConfiguration('codegit');
-    // Only when set: changing settings reloads every view.
-    if (settings.inspect('branchSort')?.globalValue !== undefined) {
-      await settings.update('branchSort', undefined, vscode.ConfigurationTarget.Global);
+    for (const key of ['branchSort', 'updateStackedBranches']) {
+      // Only when set: changing settings reloads every view.
+      if (settings.inspect(key)?.globalValue !== undefined) await settings.update(key, undefined, vscode.ConfigurationTarget.Global);
     }
     sync(this.snapshot, this.playground);
     await this.refresh();

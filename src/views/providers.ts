@@ -51,6 +51,7 @@ const TODO_ICONS: Record<TodoEntry['action'], string> = {
   fixup: 'fold-up',
   drop: 'trash',
   merge: 'git-merge',
+  'update-ref': 'git-branch',
 };
 
 export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
@@ -116,7 +117,7 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
   protected keyOf(roots: (CommitNode | TodoNode)[]): string {
     const unpushed = this.unpushed ? [...this.unpushed].join(',') : 'none';
     const state = JSON.stringify([this.head, this.bisect, this.filterPath, this.search, this.allBranches]);
-    const items = roots.map((n) => (n.kind === 'todo' ? `${n.action} ${n.sha}` : `${n.sha} ${n.refs?.join(',')}`));
+    const items = roots.map((n) => (n.kind === 'todo' ? `${n.action} ${n.sha} ${n.ref ?? ''}` : `${n.sha} ${n.refs?.join(',')}`));
     return `${unpushed}\n${state}\n${items.join('\n')}`;
   }
 
@@ -196,6 +197,14 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
 
   private todoItem(node: TodoNode): vscode.TreeItem {
     const item = new vscode.TreeItem(node.subject, vscode.TreeItemCollapsibleState.None);
+    if (node.action === 'update-ref') {
+      item.id = `todo:${node.ref}`;
+      item.description = 'stacked branch';
+      item.tooltip = `Pending rebase step: ${node.subject} to the commit above it`;
+      item.iconPath = new vscode.ThemeIcon(TODO_ICONS[node.action], new vscode.ThemeColor('charts.orange'));
+      item.contextValue = 'todo:update-ref';
+      return item;
+    }
     // A merge step without -C has no SHA; leave its id to VS Code.
     if (node.sha) item.id = `todo:${node.sha}`;
     item.description = `${node.action} · ${node.sha}`;
