@@ -3,14 +3,17 @@ import * as path from 'node:path';
 import {
   EMPTY_TREE,
   getBisectState,
+  getCommitMessage,
   getOperation,
   getReflog,
   rebaseTodoPath,
   hasStagedChanges,
   headSha,
   isDirty,
+  parsePerson,
   type FileChange,
   type Operation,
+  type Person,
 } from './queries';
 import { Git } from './runner';
 import { REWORD_MESSAGES_FILE, transformTodo, type RebasePlan, type TodoAction } from './todo';
@@ -235,6 +238,21 @@ export class GitOps {
 
   async addCoAuthor(sha: string, coAuthor: string): Promise<void> {
     await this.amendMetadata(sha, ['--trailer', `Co-authored-by: ${coAuthor}`]);
+  }
+
+  /** Removes the Co-authored-by trailers naming any of `people` from the message of `sha`. */
+  async removeCoAuthors(sha: string, people: Person[]): Promise<void> {
+    const named = (value: string) => {
+      const p = parsePerson(value);
+      return people.some((q) => q.name === p.name && q.email === p.email);
+    };
+    const lines = (await getCommitMessage(this.git, sha)).split('\n');
+    const kept = lines.filter((line) => {
+      const m = /^co-authored-by:\s*(.*)$/i.exec(line.trim());
+      return !(m && named(m[1]));
+    });
+    if (kept.length === lines.length) throw new UserError('The commit has no such co-author.');
+    await this.reword(sha, kept.join('\n').replace(/\s+$/, ''));
   }
 
   /**

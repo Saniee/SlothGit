@@ -670,6 +670,9 @@ scenario('commit: amend author (reset, set, co-author)', async (t) => {
   assert.match(t.sh('log', '-1', '--format=%B'), /Co-authored-by: Grace Hopper <grace@example.com>/);
   const shown = await t.commit('Add profile page');
   assert.deepEqual(shown.coAuthors, [{ name: 'Grace Hopper', email: 'grace@example.com' }], 'the Commits view lists the co-author');
+  await t.run('codegit.commit.amendAuthor', [await t.commit('Add profile page')], [pick('Remove Co-Author…'), button('Remove', /Remove Grace Hopper as co-author/)]);
+  assert.doesNotMatch(t.sh('log', '-1', '--format=%B'), /Co-authored-by/);
+  assert.match(t.sh('log', '-1', '--format=%B'), /Refs: #42/, 'the rest of the message is kept');
   assert.equal(t.status(), BASELINE);
 });
 

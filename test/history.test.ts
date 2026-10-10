@@ -171,6 +171,22 @@ describe('history', { concurrency }, () => {
     assert.equal(await getOperation(r.git), undefined);
   });
 
+  test('remove co-authors, keeping the rest of the message', async () => {
+    const r = setup();
+    r.sh('commit', '-q', '--amend', '-m', 'c3\n\nBody text.\n\nRefs: #42\nCo-authored-by: Pair <pair@example.com>\nco-authored-by: Second <second@example.com>');
+    r.commit('f4.txt', 'v4\n', 'c4');
+    const sha = r.sh('rev-parse', 'HEAD~1');
+    await r.ops.removeCoAuthors(sha, [{ name: 'Pair', email: 'pair@example.com' }]);
+    assert.equal(r.sh('log', '-1', '--format=%B', 'HEAD~1'), 'c3\n\nBody text.\n\nRefs: #42\nco-authored-by: Second <second@example.com>');
+    await r.ops.removeCoAuthors(r.sh('rev-parse', 'HEAD~1'), [{ name: 'Second', email: 'second@example.com' }]);
+    assert.equal(r.sh('log', '-1', '--format=%B', 'HEAD~1'), 'c3\n\nBody text.\n\nRefs: #42');
+    assert.deepEqual(r.subjects(), ['c4', 'c3', 'c2', 'c1']);
+    await assert.rejects(r.ops.removeCoAuthors(r.sh('rev-parse', 'HEAD'), [{ name: 'Pair', email: 'pair@example.com' }]), /no such co-author/);
+    r.sh('commit', '-q', '--amend', '-m', 'c4\n\nCo-authored-by: Pair <pair@example.com>');
+    await r.ops.removeCoAuthors(r.sh('rev-parse', 'HEAD'), [{ name: 'Pair', email: 'pair@example.com' }]);
+    assert.equal(r.sh('log', '-1', '--format=%B'), 'c4', 'on HEAD, with no trailing blank line left');
+  });
+
   test('remove a file from an older commit, discarding or keeping the change', async () => {
     const r = setup();
     r.write('f1.txt', 'changed in c4\n');

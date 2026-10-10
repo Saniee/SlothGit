@@ -52,7 +52,10 @@ jobs:
         run: |
           prerelease=""
           if [[ "${GITHUB_REF_NAME}" == *-* ]]; then prerelease="--prerelease"; fi
+          # Release notes: this version's section of CHANGELOG.md, or GitHub's generated notes when it has none.
+          awk -v v="${GITHUB_REF_NAME#v}" '/^## / { found = ($2 == v); next } found' CHANGELOG.md > notes.md
+          if [[ -s notes.md ]]; then notes=(--notes-file notes.md); else notes=(--generate-notes); fi
           gh release create "${GITHUB_REF_NAME}" codegit-*.vsix \
             --title "CodeGit ${GITHUB_REF_NAME}" \
-            --generate-notes \
+            "${notes[@]}" \
             ${prerelease}

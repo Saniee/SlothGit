@@ -50,7 +50,7 @@ Rewrite history straight from the commit list, with no todo file to edit by hand
 | Edit commit (pause rebase) | Stage changes, then **Continue** amends it |
 | Amend staged changes into commit | Folds staged changes into any older commit; unstaged changes are preserved |
 | Create fixup commit / squash fixup commits above | `git commit --fixup` and `--autosquash` (lazygit `F` / `S`) |
-| Amend author | Reset author, set author, or add a `Co-authored-by` trailer |
+| Amend author | Reset author, set author, or add or remove a `Co-authored-by` trailer |
 | Move commit up / down | |
 | Copy / paste for cherry-pick | Copy on one branch, paste on another |
 | Reset to here (soft / mixed / hard), create branch or tag here, checkout, revert | |
@@ -125,14 +125,14 @@ Press `F5` to launch an Extension Development Host.
 Pushing a version tag builds the extension, runs the tests and attaches the `.vsix` to a GitHub Release (see `.github/workflows/release.yml`). Nothing is published to the Marketplace.
 
 ```bash
-git tag 0.1.0
+git tag 0.3.0
 ```
 
 ```bash
-git push origin 0.1.0
+git push origin 0.3.0
 ```
 
-The tag must match `version` in `package.json`, with or without a `v` in front. Tags with a suffix, such as `0.1.0-beta.1`, become pre-releases. Install a release with **Extensions: Install from VSIX…**.
+The tag must match `version` in `package.json`, with or without a `v` in front. Tags with a suffix, such as `0.3.0-beta.1`, become pre-releases. The release notes are that version's section of [CHANGELOG.md](CHANGELOG.md) (a `## 0.3.0` heading), so add it before tagging. Install a release with **Extensions: Install from VSIX…**.
 
 ## Roadmap ideas
 

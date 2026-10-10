@@ -1,0 +1,36 @@
+# Changelog
+
+## 0.3.0
+
+### Added
+- **Stacked branches:** rewriting history can also move other local branches that point at the rewritten commits (`git rebase --update-refs`), so a branch stacked on another stays stacked. New setting `codegit.updateStackedBranches` (`gitConfig`, `always`, `never`); the default follows git's `rebase.updateRefs`. A paused rebase lists the branch updates as steps, and moving a commit across one moves it into that branch.
+- **Custom patch:** collect changes from one commit, whole files (**Add to Custom Patch**) or selected lines in its diffs (**Add Selected Changes to Custom Patch**). The status bar shows the patch; click it to remove it from the commit, move it to the index, a new commit or another commit (older or newer), apply it to the working tree (also in reverse), show it or reset it. **Move Custom Patch into This Commit** on a commit does the same. If the patch doesn't apply to the target commit, history is left as it was.
+- **Merge commits:** a merge can now be reworded, edited (including amending its author) or dropped. Dropping it takes the merged-in commits out of the branch's history. **Revert Commit** on a merge asks which parent's side to keep (`git revert -m`).
+- **Move Unpushed Commits to New Branch…** on the current branch in the Branches view, for commits made on the wrong branch: the new branch gets them (and your uncommitted changes), and the current branch goes back to its upstream.
+- **Co-authors:** `Co-authored-by` trailers are shown in commit rows (author initials such as `AL+GH`), in tooltips, and in the Commit Graph (an avatar per person, and "with …" in the details).
+- **Remove Co-Author…** in **Amend Author…**, for co-authors added by mistake. It lists the commit's co-authors and keeps the rest of the message.
+- **Main-branch colours:** setting `codegit.mainBranches` (default `main` and `master`) sets which branches count as the main branch.
+
+### Changed
+- Commit icon colours follow lazygit: green for commits already on a main branch, yellow for pushed, red for not pushed yet. Before, green meant pushed and yellow meant not pushed.
+- Rewrites that include merge commits now refuse only squash, fixup and moving across a merge; reword, edit and drop work on the merge itself.
+
+## 0.1.0
+
+### Changed
+- Faster view refreshes: commands that change the Commits view's filter, search or branch scope reload only that view, and only when something changed. Reload requests that arrive while one is queued join it. Saving a file no longer reloads the views unless refs, HEAD, the stash, config, worktrees or an in-progress operation changed.
+- Fewer git calls: the git directory is looked up once per repository, branches load in one parallel round, and rebase checks run in parallel.
+- Release builds accept version tags with or without a `v` prefix (`0.1.0` or `v0.1.0`).
+
+## 0.0.1
+
+First release.
+
+- Branches, Commits, Reflog and Stashes views in the Source Control sidebar, in lazygit's order. The Commits view replaces the built-in Graph view.
+- Branches view: local branches with ahead/behind counts, remotes, tags and worktrees, with checkout, merge, rebase (including onto a marked base and interactive), fast-forward, push, pull requests, delete merged branches and more.
+- Commits view: squash, fixup, drop, reword, edit, amend into any commit, fixup commits and autosquash, amend author, move up/down, cherry-pick, reset, revert, bisect and compare. Rewrites also work across merge commits (`--rebase-merges`).
+- A paused rebase lists its steps; reorder them or change their action before continuing.
+- Line-level patches from a commit's diff: remove selected changes from the commit, move them to the index or split them into a new commit.
+- Commit Graph editor, commit search, all-branches mode and file history.
+- Undo / redo of Git actions from the reflog.
+- Fetch / Pull / Push buttons on the Changes view.

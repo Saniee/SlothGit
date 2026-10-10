@@ -167,10 +167,31 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
           { label: 'Reset Author', description: 'Use your current user.name and user.email', id: 'reset' },
           { label: 'Set Author…', description: 'Name <email>', id: 'set' },
           { label: 'Add Co-Author…', description: 'Adds a Co-authored-by trailer', id: 'coauthor' },
+          ...(node.coAuthors?.length
+            ? [{ label: 'Remove Co-Author…', description: node.coAuthors.map((p) => p.name).join(', '), id: 'removeCoauthor' }]
+            : []),
         ],
         { title: `Author of ${node.shortSha}` },
       );
       if (!picked) return;
+      if (picked.id === 'removeCoauthor') {
+        const people = node.coAuthors ?? [];
+        const chosen =
+          people.length === 1
+            ? people
+            : (
+                await vscode.window.showQuickPick(
+                  people.map((p) => ({ label: p.name, description: p.email, person: p })),
+                  { title: `Co-authors to remove from ${node.shortSha}`, canPickMany: true },
+                )
+              )?.map((i) => i.person);
+        if (!chosen?.length) return;
+        const names = chosen.map((p) => p.name).join(', ');
+        if (!(await confirm(`Remove ${names} as co-author of ${node.shortSha}?`, 'Remove'))) return;
+        if (!(await confirmRewrite([node]))) return;
+        await run('Removing co-author…', (ops) => ops.removeCoAuthors(node.sha, chosen));
+        return;
+      }
       let value = '';
       if (picked.id !== 'reset') {
         const input = await vscode.window.showInputBox({
