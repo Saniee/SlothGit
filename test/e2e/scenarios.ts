@@ -243,6 +243,17 @@ scenario('commit: rewriting a stacked branch moves the branch it is stacked on',
   assert.equal(t.rev('HEAD~2'), t.rev('feature/login'), 'feature/login-ui is still stacked on it');
 });
 
+scenario('commits: colored by merged into main, pushed, not pushed', async (t) => {
+  await t.checkout('feature/login');
+  const color = async (subject: string) => {
+    const item = t.api.providers.commits.getTreeItem(await t.commit(subject)) as vscode.TreeItem;
+    return ((item.iconPath as vscode.ThemeIcon).color as { id?: string } | undefined)?.id;
+  };
+  assert.equal(await color('Login: error messages'), 'charts.red');
+  assert.equal(await color('Login: validate input'), 'charts.yellow');
+  assert.equal(await color('Add config'), 'charts.green', 'already on origin/main');
+});
+
 scenario('branch: move unpushed commits to a new branch', async (t) => {
   await t.checkout('feature/login');
   await t.run('codegit.branch.moveCommitsToNewBranch', [], [input('feature/login-errors', /unpushed commits of feature\/login \(1 not pushed\)/)]);

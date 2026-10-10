@@ -51,6 +51,17 @@
           "default": true,
           "description": "Ask for confirmation before rewriting commits that are already on the upstream branch."
         },
+        "codegit.mainBranches": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "main",
+            "master"
+          ],
+          "markdownDescription": "Branches that count as the main branch, as in lazygit. Commits already on one (on its upstream, if it has one) are shown green, pushed commits yellow and unpushed ones red."
+        },
         "codegit.updateStackedBranches": {
           "type": "string",
           "enum": [

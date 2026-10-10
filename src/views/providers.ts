@@ -8,8 +8,10 @@ import {
   getReflog,
   getStashes,
   getStashFiles,
+  getMainRefs,
   getUnpushed,
   notOnHead,
+  reachableFrom,
   type BisectState,
 } from '../git/queries';
 import type { TodoEntry } from '../git/todo';
@@ -63,6 +65,9 @@ const TODO_ICONS: Record<TodoEntry['action'], string> = {
 
 export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
   private unpushed: Set<string> | null = null;
+  /** Commits already on a main branch (codegit.mainBranches), and which one. */
+  private merged = new Set<string>();
+  private mainRef: string | undefined;
   private head: string | undefined;
   /** Commit marked with "Mark as Base Commit"; rebasing onto a branch then only moves the commits after it. */
   baseSha: string | undefined;
@@ -88,9 +93,9 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
     return this.roots.filter((n): n is CommitNode => n.kind === 'commit');
   }
 
-  /** True when the commit is already on the upstream branch. */
+  /** True when the commit is already on the upstream branch, or on a main branch. */
   isPushed(sha: string): boolean {
-    return this.unpushed !== null && !this.unpushed.has(sha);
+    return (this.unpushed !== null && !this.unpushed.has(sha)) || this.merged.has(sha);
   }
 
   protected async load(git: Git): Promise<(CommitNode | TodoNode)[]> {
@@ -104,25 +109,32 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
     // While bisecting HEAD jumps around; keep showing the branch the bisect started from.
     const ref = bisect ? bisect.start : 'HEAD';
     const paths = this.filterPath ? [this.filterPath] : [];
-    const [log, unpushed, head, todo] = await Promise.all([
+    const [log, unpushed, head, todo, mainRefs] = await Promise.all([
       getLog(git, config('commitLimit', 300), ref, paths, { all: this.allBranches, search: this.search }),
       getUnpushed(git),
       git.exec(['rev-parse', '-q', '--verify', 'HEAD'], { allowedExitCodes: [1, 128] }),
       operation === 'rebase' ? getRebaseTodo(git) : Promise.resolve([]),
+      getMainRefs(git, config<string[]>('mainBranches', ['main', 'master'])),
     ]);
     this.unpushed = unpushed;
     this.head = head.stdout.trim() || undefined;
+    this.mainRef = mainRefs[0]?.replace(/^refs\/(heads|remotes)\//, '');
     this.todoCount = todo.length;
 
     // The todo list runs oldest first; show it newest first, above the commits.
     const todoNodes = todo.map((t): TodoNode => ({ kind: 'todo', ...t })).reverse();
-    const others = this.allBranches ? await notOnHead(git, log.map((c) => c.sha)) : new Set<string>();
+    const shas = log.map((c) => c.sha);
+    const [others, merged] = await Promise.all([
+      this.allBranches ? notOnHead(git, shas) : Promise.resolve(new Set<string>()),
+      reachableFrom(git, shas, mainRefs),
+    ]);
+    this.merged = merged;
     const commits = log.map((c, index): CommitNode => ({ kind: 'commit', source: 'log', index, ...c, onHead: !others.has(c.sha) }));
     return [...todoNodes, ...commits];
   }
 
   protected keyOf(roots: (CommitNode | TodoNode)[]): string {
-    const unpushed = this.unpushed ? [...this.unpushed].join(',') : 'none';
+    const unpushed = `${this.unpushed ? [...this.unpushed].join(',') : 'none'} ${[...this.merged].join(',')}`;
     const state = JSON.stringify([this.head, this.bisect, this.filterPath, this.search, this.allBranches]);
     const items = roots.map((n) => (n.kind === 'todo' ? `${n.action} ${n.sha} ${n.ref ?? ''}` : `${n.sha} ${n.refs?.join(',')}`));
     return `${unpushed}\n${state}\n${items.join('\n')}`;
@@ -147,6 +159,7 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
     item.description = [node.relDate, ...(node.refs ?? [])].join(' · ');
 
     const pushed = this.isPushed(node.sha);
+    const merged = this.merged.has(node.sha);
     const copied = this.clipboard.has(node.sha);
     const isBase = node.sha === this.baseSha;
     const bisect = this.bisectMark(node.sha);
@@ -163,8 +176,9 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
       // Another branch's commit (all-branches mode): not part of this branch's push state.
       item.iconPath = new vscode.ThemeIcon(merge ? 'git-merge' : 'git-commit', new vscode.ThemeColor('disabledForeground'));
     } else {
-      const color = this.unpushed === null ? undefined : new vscode.ThemeColor(pushed ? 'charts.green' : 'charts.yellow');
-      item.iconPath = new vscode.ThemeIcon(merge ? 'git-merge' : 'git-commit', color);
+      // As in lazygit: green when on a main branch, yellow when pushed, red when not pushed yet.
+      const color = merged ? 'charts.green' : pushed ? 'charts.yellow' : this.unpushed !== null ? 'charts.red' : undefined;
+      item.iconPath = new vscode.ThemeIcon(merge ? 'git-merge' : 'git-commit', color && new vscode.ThemeColor(color));
     }
 
     const tooltip = new vscode.MarkdownString();
@@ -176,7 +190,8 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
     if (merge) tooltip.appendMarkdown(`$(git-merge) Merge commit (${node.parents.length} parents)\n\n`);
     if (node.onHead === false) tooltip.appendMarkdown('$(git-branch) Not on the current branch\n\n');
     if (node.refs?.length) tooltip.appendMarkdown(`${escape(node.refs.join(', '))}\n\n`);
-    if (this.unpushed !== null && node.onHead !== false) tooltip.appendMarkdown(pushed ? '$(cloud) Pushed' : '$(cloud-upload) Not pushed yet');
+    if (merged && node.onHead !== false) tooltip.appendMarkdown(`$(git-merge) On ${escape(this.mainRef ?? 'the main branch')}`);
+    else if (this.unpushed !== null && node.onHead !== false) tooltip.appendMarkdown(pushed ? '$(cloud) Pushed' : '$(cloud-upload) Not pushed yet');
     if (copied) tooltip.appendMarkdown('\n\n$(clippy) Copied for cherry-pick');
     if (isBase) tooltip.appendMarkdown('\n\n$(debug-breakpoint) Marked as base: rebasing onto a branch moves only the commits above this one');
     if (bisect) tooltip.appendMarkdown(`\n\n$(${bisect.icon}) Bisect: ${bisect.label}`);

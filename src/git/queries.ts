@@ -146,6 +146,34 @@ export async function notOnHead(git: Git, shas: string[]): Promise<Set<string>> 
   return new Set(result.exitCode === 0 ? splitList(result.stdout, '\n').map((s) => s.trim()) : shas);
 }
 
+/**
+ * The refs that count as "the main branch" (lazygit's mainBranches): for each name, the local branch's upstream,
+ * or the local branch when it has none, or origin/<name> when there is no local branch.
+ */
+export async function getMainRefs(git: Git, names: string[]): Promise<string[]> {
+  if (!names.length) return [];
+  const output = await git.run([
+    'for-each-ref',
+    '--format=%(refname)%09%(upstream)',
+    ...names.flatMap((n) => [`refs/heads/${n}`, `refs/remotes/origin/${n}`]),
+  ]);
+  const found = new Map(output.split(/\r?\n/).filter(Boolean).map((line) => line.split('\t') as [string, string]));
+  return names.flatMap((n) => {
+    if (found.has(`refs/heads/${n}`)) return [found.get(`refs/heads/${n}`) || `refs/heads/${n}`];
+    return found.has(`refs/remotes/origin/${n}`) ? [`refs/remotes/origin/${n}`] : [];
+  });
+}
+
+/** Of `shas`, the ones reachable from any of `refs` (e.g. merged into the main branch). */
+export async function reachableFrom(git: Git, shas: string[], refs: string[]): Promise<Set<string>> {
+  if (!shas.length || !refs.length) return new Set();
+  const input = [...shas, ...refs.map((r) => `^${r}`)].join('\n') + '\n';
+  const result = await git.exec(['rev-list', '--stdin'], { input, allowedExitCodes: [128] });
+  if (result.exitCode !== 0) return new Set();
+  const outside = new Set(splitList(result.stdout, '\n').map((s) => s.trim()));
+  return new Set(shas.filter((sha) => !outside.has(sha)));
+}
+
 /** Commits on HEAD that are not on its upstream, or null when there is no upstream. */
 export async function getUnpushed(git: Git): Promise<Set<string> | null> {
   const result = await git.exec(['rev-list', '@{upstream}..HEAD'], { allowedExitCodes: [128] });

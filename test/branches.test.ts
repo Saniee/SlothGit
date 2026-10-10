@@ -5,7 +5,17 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, test } from 'node:test';
 import { buildEditorCommand, GitOps } from '../src/git/operations';
-import { getLocalBranches, getOperation, getRebaseTodo, getRemoteBranches, getRemotes, getTags, parseTrack } from '../src/git/queries';
+import {
+  getLocalBranches,
+  getMainRefs,
+  getOperation,
+  getRebaseTodo,
+  getRemoteBranches,
+  getRemotes,
+  getTags,
+  parseTrack,
+  reachableFrom,
+} from '../src/git/queries';
 import { GitError, Git } from '../src/git/runner';
 import { repoSignature } from '../src/git/signature';
 import { concurrency, git, newRepo, writeFile } from './repo';
@@ -256,6 +266,22 @@ describe('branches', { concurrency }, () => {
     assert.deepEqual(r.subjects(), ['c3', 'c2', 'c1']);
     assert.equal(r.sh('rev-parse', 'main'), r.sh('rev-parse', 'origin/main'));
     assert.equal(fs.readFileSync(path.join(r.dir, 'a.txt'), 'utf8'), 'dirty\n', 'uncommitted changes come along');
+  });
+
+  test('main branches: the upstream when there is one, and which commits are on them', async () => {
+    const r = setup();
+    assert.deepEqual(await getMainRefs(r.git, ['main', 'master']), ['refs/heads/main'], 'no upstream: the local branch');
+    withOrigin(r);
+    r.commit('b.txt', 'b\n', 'unpushed on main');
+    assert.deepEqual(await getMainRefs(r.git, ['main', 'master']), ['refs/remotes/origin/main']);
+    r.sh('switch', '-q', '-c', 'feature');
+    r.commit('c.txt', 'c\n', 'feature work');
+    const [feature, unpushed, c1] = r.sh('log', '--format=%H').split('\n');
+    const merged = await reachableFrom(r.git, [feature, unpushed, c1], ['refs/remotes/origin/main']);
+    assert.deepEqual([...merged], [c1]);
+    r.sh('branch', '-q', '-D', 'main');
+    assert.deepEqual(await getMainRefs(r.git, ['main']), ['refs/remotes/origin/main'], 'no local branch: origin/<name>');
+    assert.deepEqual(await getMainRefs(r.git, ['trunk']), []);
   });
 
   test('the repository signature changes with refs and HEAD, not with working tree edits', async () => {

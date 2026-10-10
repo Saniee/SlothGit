@@ -3,7 +3,7 @@
 // Commits view's own commands, through VS Code's webview context menu.
 import * as vscode from 'vscode';
 import { layoutGraph, parseRefs, type GraphRef, type GraphRow } from '../git/graph';
-import { getCommitMessage, getLog, getRemotes, getUnpushed, notOnHead, type Commit, type Person } from '../git/queries';
+import { getCommitMessage, getLog, getMainRefs, getRemotes, getUnpushed, notOnHead, reachableFrom, type Commit, type Person } from '../git/queries';
 import type { RepoManager } from '../repoManager';
 import { graphHtml } from './graphHtml';
 import type { CommitNode, FileNode } from './nodes';
@@ -24,6 +24,8 @@ export interface GraphCommit {
   onHead: boolean;
   /** null when the branch has no upstream. */
   pushed: boolean | null;
+  /** On a main branch (codegit.mainBranches). */
+  merged: boolean;
   head: boolean;
   graph: GraphRow;
 }
@@ -115,14 +117,16 @@ export class GraphPanel implements vscode.Disposable {
       return;
     }
     const limit = config('commitLimit', 300);
-    const [log, remotes, unpushed, head, branch] = await Promise.all([
+    const [log, remotes, unpushed, head, branch, mainRefs] = await Promise.all([
       getLog(git, limit, 'HEAD', [], { all: this.all, search: this.search }),
       getRemotes(git),
       getUnpushed(git),
       git.exec(['rev-parse', '-q', '--verify', 'HEAD'], { allowedExitCodes: [1, 128] }),
       git.exec(['branch', '--show-current'], { allowedExitCodes: [128] }),
+      getMainRefs(git, config<string[]>('mainBranches', ['main', 'master'])),
     ]);
-    const others = await notOnHead(git, log.map((c) => c.sha));
+    const shas = log.map((c) => c.sha);
+    const [others, merged] = await Promise.all([notOnHead(git, shas), reachableFrom(git, shas, mainRefs)]);
     const headSha = head.stdout.trim();
     const remoteNames = remotes.map((r) => r.name);
     // Lanes only make sense for an unbroken history; a search result is drawn as single dots.
@@ -144,6 +148,7 @@ export class GraphPanel implements vscode.Disposable {
       refs: parseRefs(c.refs, remoteNames),
       onHead: !others.has(c.sha),
       pushed: unpushed === null || others.has(c.sha) ? null : !unpushed.has(c.sha),
+      merged: merged.has(c.sha),
       head: c.sha === headSha,
       graph: graph[i],
     }));

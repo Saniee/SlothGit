@@ -87,7 +87,9 @@ export function graphHtml(webview: vscode.Webview): string {
     font-size: 9px; font-weight: 600; color: var(--vscode-editor-background);
   }
   .sha { font-family: var(--vscode-editor-font-family); font-size: 11px; }
-  .unpushed .sha { color: var(--vscode-charts-yellow); }
+  .merged .sha { color: var(--vscode-charts-green); }
+  .pushed .sha { color: var(--vscode-charts-yellow); }
+  .unpushed .sha { color: var(--vscode-charts-red); }
   #details {
     flex: 0 0 auto; max-height: 40%; overflow: auto; display: none; padding: 10px 14px;
     border-top: 1px solid var(--vscode-panel-border, var(--vscode-focusBorder));
@@ -189,7 +191,7 @@ export function graphHtml(webview: vscode.Webview): string {
       list.appendChild(el('div', 'empty', state.search ? 'No commits match "' + state.search + '".' : 'No commits.'));
     }
     rows.forEach(function (r, i) {
-      const row = el('div', 'row' + (r.onHead ? '' : ' other') + (r.head ? ' head' : '') + (r.pushed === false ? ' unpushed' : ''));
+      const row = el('div', 'row' + (r.onHead ? '' : ' other') + (r.head ? ' head' : '') + (r.merged ? ' merged' : r.pushed === false ? ' unpushed' : r.pushed ? ' pushed' : ''));
       row.setAttribute('role', 'option');
       row.dataset.index = String(i);
       row.dataset.vscodeContext = JSON.stringify({
@@ -220,7 +222,7 @@ export function graphHtml(webview: vscode.Webview): string {
       const date = el('div', 'date', r.relDate);
       date.title = new Date(r.date).toLocaleString();
       const sha = el('div', 'sha', r.shortSha);
-      sha.title = r.sha + (r.pushed === false ? ' (not pushed yet)' : r.pushed ? ' (pushed)' : '');
+      sha.title = r.sha + (r.merged ? ' (on the main branch)' : r.pushed === false ? ' (not pushed yet)' : r.pushed ? ' (pushed)' : '');
       row.append(graph, desc, author, date, sha);
       list.appendChild(row);
     });
