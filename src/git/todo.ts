@@ -1,8 +1,10 @@
 // Pure rewriting of git's interactive rebase todo list. Used by rebaseEditor.ts, which git runs as GIT_SEQUENCE_EDITOR.
 //
 // With --rebase-merges the list also has `label`, `reset` and `merge` lines that rebuild the branch structure.
-// Those are never changed here, and changes that would cross them (squashing into another branch's commit,
-// moving a commit past a merge or a branch point) are refused, which makes git abort the rebase.
+// Changes that would cross them (squashing into another branch's commit, moving a commit past a merge or a branch
+// point) are refused, which makes git abort the rebase. A merge step itself can be reworded (`merge -c`), edited
+// (a `break` after it) or dropped (the merged branch's commits then drop out of the history), but not squashed
+// or moved.
 //
 // With --update-refs (stacked branches) it has `update-ref` lines, each after the commit that branch points at.
 // Moving a commit across one moves the commit into the other branch, and leaves the other commit where it was.
@@ -94,20 +96,27 @@ export function transformTodo(todo: string, plan: RebasePlan): string {
     if (merge?.[1]) merges.push(merge[1].toLowerCase());
   });
   const commitIndexes = [...parsed.keys()];
+  const isMerge = (fullSha: string) => merges.some((sha) => fullSha.toLowerCase().startsWith(sha));
 
   const find = (fullSha: string): number => {
     const full = fullSha.toLowerCase();
     const index = commitIndexes.find((i) => full.startsWith(parsed.get(i)!.sha));
     if (index !== undefined) return index;
-    if (merges.some((sha) => full.startsWith(sha))) throw new Error(`${fullSha.slice(0, 10)} is a merge commit, which can't be changed here`);
+    if (isMerge(full)) throw new Error(`${fullSha.slice(0, 10)} is a merge commit, which can't be squashed or moved`);
     throw new Error(`commit ${fullSha.slice(0, 10)} is not in the rebase todo list`);
   };
+  // Merge steps are changed last, as editing one adds a line.
+  const mergeActions: [string, TodoAction][] = [];
   const render = (i: number, action: TodoAction) => `${action} ${parsed.get(i)!.sha}${parsed.get(i)!.rest}`;
   /** True when a label, reset or merge line lies strictly between lines a and b. */
   const structureBetween = (a: number, b: number) =>
     lines.slice(Math.min(a, b) + 1, Math.max(a, b)).some((line) => STRUCTURE_LINE.test(line));
 
   for (const [sha, action] of Object.entries(plan.actions ?? {})) {
+    if (isMerge(sha) && action !== 'squash' && action !== 'fixup') {
+      mergeActions.push([sha.toLowerCase(), action]);
+      continue;
+    }
     const i = find(sha);
     if (action === 'squash' || action === 'fixup') {
       // The commit is melded into whatever was applied just before it, which must be its parent on the same branch.
@@ -144,6 +153,17 @@ export function transformTodo(todo: string, plan: RebasePlan): string {
     lines.splice(i, 1);
     // Directly after the target, before any label that marks it as a branch point.
     lines.splice(i < target ? target : target + 1, 0, line);
+  }
+
+  for (const [sha, action] of mergeActions) {
+    const i = lines.findIndex((line) => {
+      const m = MERGE_LINE.exec(line);
+      return !!m?.[1] && sha.startsWith(m[1].toLowerCase());
+    });
+    if (action === 'drop') lines.splice(i, 1);
+    // -c (lowercase) asks for the message instead of reusing the original's.
+    else if (action === 'reword') lines[i] = lines[i].replace(/^(?:merge|m)\s+-C\s/, 'merge -c ');
+    else if (action === 'edit') lines.splice(i + 1, 0, 'break');
   }
 
   if (plan.pauseFirst) {

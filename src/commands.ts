@@ -349,6 +349,16 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     'codegit.commit.revert': async (arg?: Node, all?: Node[]) => {
       const nodes = logTargets(arg, all);
       if (!nodes.length) return;
+      const merge = nodes.find((n) => n.parents.length > 1);
+      if (merge) {
+        if (nodes.length > 1) {
+          void vscode.window.showInformationMessage('Revert a merge commit on its own.');
+          return;
+        }
+        const mainline = await pickMainline(merge);
+        if (mainline) await run('Reverting…', (ops) => ops.revert([merge.sha], mainline));
+        return;
+      }
       if (!(await confirm(`Revert ${plural(nodes, 'commit')}? This creates new commits that undo them.`, 'Revert'))) return;
       await run('Reverting…', (ops) => ops.revert(shas(nodes)));
     },
@@ -441,6 +451,22 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       return;
     }
     await run(title, (ops) => fn(ops, operation));
+  }
+
+  /** For reverting a merge: the parent whose side is kept (git revert -m). */
+  async function pickMainline(merge: CommitNode): Promise<number | undefined> {
+    const git = repos.git();
+    if (!git) return undefined;
+    const subjects = (await git.run(['log', '--no-walk=unsorted', '--format=%s', ...merge.parents])).split(/\r?\n/);
+    const items = merge.parents.map((sha, i) => ({
+      label: `Keep parent ${i + 1}: ${subjects[i] ?? ''}`,
+      description: `${sha.slice(0, 7)}${i === 0 ? ' · the branch merged into (usual)' : ' · a merged-in branch'}`,
+      mainline: i + 1,
+    }));
+    const picked = await vscode.window.showQuickPick(items, {
+      title: `Revert merge ${merge.shortSha}: which side to keep? The changes from the other side are undone.`,
+    });
+    return picked?.mainline;
   }
 
   /** Remove the selected files' changes from their commit, discarding them or moving them to the index. */

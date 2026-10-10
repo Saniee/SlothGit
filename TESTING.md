@@ -28,7 +28,7 @@ Re-run the command whenever you want to start over. It replaces the previous pla
 | `feature/login-ui` | Stacked on `feature/login` | Mark "Login: error messages" as base, then rebase onto `main` with the marked base, so only the 2 UI commits move. With `codegit.updateStackedBranches` set to `always`, reword a `feature/login` commit from here: `feature/login` moves too, and an interactive rebase lists "Update branch feature/login" |
 | `conflict/status-line` | Edits the same line as `main` | Merge into `main`, or rebase it onto `main`, to get a conflict; Continue / Abort from the status bar |
 | `feature/search` | Has a `fixup!` commit | Squash Fixup Commits Above on "Add search"; Create Fixup Commit |
-| `feature/with-merge` | Contains a merge commit | Reword or drop "Side work" below the merge: the merge is recreated. Dropping the merge itself, or squashing "Merged-in work", should refuse with a clear message |
+| `feature/with-merge` | Contains a merge commit | Reword or drop "Side work" below the merge: the merge is recreated. Reword, drop and revert the merge itself (revert asks which parent to keep). Squashing or moving the merge, or squashing "Merged-in work", should refuse with a clear message |
 | `chore/gone-upstream` | Upstream deleted on remote | Shows "upstream gone"; Unset Upstream; Delete |
 | `origin/remote-only` | No local branch | Checkout creates a tracking branch |
 | `release/1.x` | Behind its upstream by 1 | Fast-forward without checking it out |

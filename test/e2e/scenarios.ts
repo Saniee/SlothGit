@@ -570,14 +570,27 @@ scenario('commit: rewriting below a merge commit keeps the merge', async (t) => 
   assert.equal(t.sh('log', '-1', '--format=%s', 'HEAD^^2'), 'Merged-in work');
 });
 
-scenario('commit: a merge commit itself cannot be changed', async (t) => {
+scenario('commit: reword, revert and drop a merge commit', async (t) => {
   await t.checkout('feature/with-merge');
-  const before = t.rev('HEAD');
-  const merge = (await t.commits()).find((c) => c.parents.length === 2);
-  assert.ok(merge);
-  await t.run('codegit.commit.drop', [merge], [button('Continue', /Drop 1 commit/)]);
-  assert.ok(t.saw('warning', /merge commit itself/));
-  assert.equal(t.rev('HEAD'), before);
+  const merge = async () => {
+    const found = (await t.commits()).find((c) => c.parents.length === 2);
+    assert.ok(found, 'a merge commit in the Commits view');
+    return found;
+  };
+  await t.run('codegit.commit.reword', [await merge()], [input('Merge the merged-in work')]);
+  assert.deepEqual(t.sh('log', '--first-parent', '--format=%s', '-3').split('\n'), ['After merge', 'Merge the merged-in work', 'Side work']);
+  assert.equal(t.sh('log', '-1', '--format=%s', 'HEAD^^2'), 'Merged-in work');
+
+  await t.run('codegit.commit.revert', [await merge()], [pick('Keep parent 1: Side work', /which side to keep/)]);
+  assert.equal(t.subjects(1)[0], 'Revert "Merge the merged-in work"');
+  assert.equal(fs.existsSync(path.join(t.repo, 'merged-in.txt')), false);
+
+  t.sh('reset', '-q', '--hard', 'HEAD~1');
+  await t.refresh();
+  await t.run('codegit.commit.drop', [await merge()], [button('Continue', /Drop 1 commit/)]);
+  assert.deepEqual(t.subjects(2), ['After merge', 'Side work']);
+  assert.equal(t.sh('rev-list', '--merges', '--count', 'HEAD'), '0');
+  assert.equal(fs.existsSync(path.join(t.repo, 'merged-in.txt')), false);
 });
 
 scenario('commit: edit, amend, continue', async (t) => {

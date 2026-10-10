@@ -77,7 +77,15 @@ test('with merges: changes within a branch work, changes across the structure ar
   assert.throws(() => transformTodo(merges, { actions: { [C3]: 'fixup' } }), /another branch or is a merge/);
   assert.throws(() => transformTodo(merges, { move: { sha: S2, direction: 'up' } }), /past a merge or branch point/);
   assert.throws(() => transformTodo(merges, { move: { sha: C3, direction: 'down' } }), /past a merge or branch point/);
-  assert.throws(() => transformTodo(merges, { actions: { [M]: 'drop' } }), /is a merge commit/);
+  assert.throws(() => transformTodo(merges, { actions: { [M]: 'fixup' } }), /merge commit/);
+  assert.throws(() => transformTodo(merges, { move: { sha: M, direction: 'up' } }), /merge commit/);
+});
+
+test('with merges: a merge step can be reworded, edited or dropped', () => {
+  assert.match(transformTodo(merges, { actions: { [M]: 'reword' } }), /\nmerge -c eeeeeee side # Merge branch side\n/);
+  assert.match(transformTodo(merges, { actions: { [M]: 'edit' } }), /\nmerge -C eeeeeee side # Merge branch side\nbreak\npick ccccccc c3/);
+  assert.doesNotMatch(transformTodo(merges, { actions: { [M]: 'drop' } }), /merge -C/);
+  assert.match(transformTodo(merges, { actions: { [M]: 'drop', [C3]: 'reword' } }), /reset onto\nreword ccccccc c3/);
 });
 
 test('pauses before the first step', () => {

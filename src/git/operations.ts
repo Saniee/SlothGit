@@ -82,14 +82,12 @@ export class GitOps {
     return parseInt(await this.git.run(['rev-list', '--merges', '--count', range]), 10) > 0;
   }
 
-  /** Merge commits are recreated by the rebase, but can't be the target of a change themselves. */
+  /** Merge commits can be reworded, edited and dropped, but not squashed, fixed up or moved. */
   private async assertNotMerges(shas: string[]): Promise<void> {
     if (!shas.length) return;
     const merges = (await this.git.run(['rev-list', '--no-walk', '--merges', ...shas])).trim();
     if (merges) {
-      throw new UserError(
-        "CodeGit can't change a merge commit itself yet (only the newest commit, by amending it). Commits before and after merges can be rewritten.",
-      );
+      throw new UserError("A merge commit can't be squashed, fixed up, moved or amended with staged changes. It can be reworded, edited or dropped.");
     }
   }
 
@@ -105,7 +103,7 @@ export class GitOps {
   ): Promise<void> {
     const [, hasMerges] = await Promise.all([
       this.assertNotMerges([
-        ...Object.keys(plan.actions ?? {}),
+        ...Object.entries(plan.actions ?? {}).flatMap(([sha, action]) => (action === 'squash' || action === 'fixup' ? [sha] : [])),
         ...(plan.move ? [plan.move.sha] : []),
         ...(plan.fixupInto ? [plan.fixupInto.target] : []),
       ]),
@@ -402,8 +400,9 @@ export class GitOps {
     await this.git.exec(['cherry-pick', ...shas]);
   }
 
-  async revert(shas: string[]): Promise<void> {
-    await this.git.exec(['revert', '--no-edit', ...shas]);
+  /** `mainline` is the parent (1-based) a merge commit is reverted against, the side whose changes are kept. */
+  async revert(shas: string[], mainline?: number): Promise<void> {
+    await this.git.exec(['revert', '--no-edit', ...(mainline ? ['-m', `${mainline}`] : []), ...shas]);
   }
 
   async reset(sha: string, mode: ResetMode): Promise<void> {

@@ -327,8 +327,8 @@ describe('operations', { concurrency }, () => {
     // s1's previous commit in the todo list is on main: squashing would meld it into the wrong branch.
     await assert.rejects(r.ops.squash([r.sha('s1')], 'squash'), /another branch|merge/);
     await assert.rejects(r.ops.squash([r.sha('c3')], 'squash'), /merge commit/);
-    await assert.rejects(r.ops.drop([r.sha('merge')]), /merge commit itself/);
-    await assert.rejects(r.ops.reword(r.sha('merge'), 'x'), /merge commit itself/);
+    await assert.rejects(r.ops.squash([r.sha('merge')], 'fixup'), /can't be squashed/);
+    await assert.rejects(r.ops.move(r.sha('merge'), 'down'), /can't be squashed, fixed up, moved/);
     await assert.rejects(r.ops.move(r.sha('m1'), 'up'), /past a merge|branch point/);
     assert.equal(await getOperation(r.git), undefined);
     assert.equal(r.sh('rev-parse', 'HEAD'), head);
@@ -338,6 +338,28 @@ describe('operations', { concurrency }, () => {
     await r.ops.reword(r.sha('merge'), 'merge reworded');
     assert.equal(r.subjects()[0], 'merge reworded');
     assert.equal(r.merges(), '1');
+  });
+
+  test('a merge commit can be reworded, edited, dropped and reverted', async () => {
+    const r = setupMerge();
+    await r.ops.reword(r.sha('merge'), 'merge reworded');
+    assert.deepEqual(r.mainline(), ['c3', 'merge reworded', 'm1', 'c2', 'c1']);
+    assert.deepEqual(r.sideline(), ['s2', 's1']);
+
+    await r.ops.setAuthor(r.sha('merge reworded'), 'Other <other@example.com>');
+    assert.equal(r.sh('log', '-1', '--format=%an', 'HEAD^'), 'Other', 'edited (amended) at a stop after the merge');
+    assert.equal(r.merges(), '1');
+
+    await r.ops.revert([r.sha('merge reworded')], 1);
+    assert.equal(r.subjects()[0], 'Revert "merge reworded"');
+    assert.equal(fs.existsSync(path.join(r.dir, 's1.txt')), false, 'the merged-in side is undone');
+    assert.equal(r.read('m1.txt'), 'm1\n');
+
+    const d = setupMerge();
+    await d.ops.drop([d.sha('merge')]);
+    assert.deepEqual(d.mainline(), ['c3', 'm1', 'c2', 'c1']);
+    assert.equal(d.merges(), '0');
+    assert.equal(fs.existsSync(path.join(d.dir, 's2.txt')), false, "the merged branch's commits are gone from this branch");
   });
 
   test('stash push, list files, rename, pop', async () => {
