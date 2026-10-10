@@ -2,14 +2,14 @@
 # Nothing is published to the Marketplace.
 #
 #   1. Set "version" in package.json (e.g. 0.1.0) and commit.
-#   2. git tag v0.1.0 && git push origin v0.1.0
+#   2. git tag 0.1.0 && git push origin 0.1.0     (a "v" prefix works too: v0.1.0)
 #
-# Tags with a suffix (v0.1.0-beta.1) become pre-releases.
+# Tags with a suffix (0.1.0-beta.1) become pre-releases.
 name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags: ['[0-9]*', 'v[0-9]*']
 
 permissions:
   contents: write
@@ -28,8 +28,8 @@ jobs:
       - name: Check the tag matches package.json
         run: |
           version=$(node -p "require('./package.json').version")
-          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${version} (expected v${version})."
+          if [ "${GITHUB_REF_NAME#v}" != "${version}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${version} (expected ${version} or v${version})."
             exit 1
           fi
 
