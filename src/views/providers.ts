@@ -35,7 +35,14 @@ export function initials(name: string | undefined): string {
  * of a row, so only the subject gets shortened in a narrow view; the tooltip has everything.
  */
 export function commitLabel(node: CommitNode, withAuthor = true): string {
-  return withAuthor ? `${node.shortSha} ${initials(node.author)}  ${node.subject}` : `${node.shortSha}  ${node.subject}`;
+  if (!withAuthor) return `${node.shortSha}  ${node.subject}`;
+  const people = [node.author, ...(node.coAuthors ?? []).map((p) => p.name)].map(initials).join('+');
+  return `${node.shortSha} ${people}  ${node.subject}`;
+}
+
+/** Tooltip lines for a commit's co-authors. */
+export function coAuthorLines(node: CommitNode): string[] {
+  return (node.coAuthors ?? []).map((p) => `Co-authored by ${p.name}${p.email ? ` <${p.email}>` : ''}`);
 }
 
 export async function commitFiles(git: Git, node: CommitNode): Promise<FileNode[]> {
@@ -165,6 +172,7 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
     const when = node.date ? `${new Date(node.date).toLocaleString()} (${node.relDate})` : node.relDate;
     const email = node.authorEmail ? ` <${node.authorEmail}>` : '';
     tooltip.appendMarkdown(`\`${node.sha}\`\n\n${escape(`${node.author ?? ''}${email}`)}, ${when}\n\n`);
+    for (const line of coAuthorLines(node)) tooltip.appendMarkdown(`${escape(line)}\n\n`);
     if (merge) tooltip.appendMarkdown(`$(git-merge) Merge commit (${node.parents.length} parents)\n\n`);
     if (node.onHead === false) tooltip.appendMarkdown('$(git-branch) Not on the current branch\n\n');
     if (node.refs?.length) tooltip.appendMarkdown(`${escape(node.refs.join(', '))}\n\n`);

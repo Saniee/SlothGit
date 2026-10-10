@@ -9,11 +9,18 @@ const RS = '\x1e';
 /** Hash of git's empty tree; used as the "parent" of a root commit. */
 export const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
+export interface Person {
+  name: string;
+  email: string;
+}
+
 export interface Commit {
   sha: string;
   shortSha: string;
   author: string;
   authorEmail: string;
+  /** From the message's Co-authored-by trailers. */
+  coAuthors: Person[];
   relDate: string;
   /** Author date, ISO 8601. */
   date: string;
@@ -73,7 +80,16 @@ function splitList(value: string | undefined, separator: string): string[] {
   return value ? value.split(separator).filter(Boolean) : [];
 }
 
-const LOG_FORMAT = ['%H', '%h', '%an', '%ae', '%ar', '%aI', '%ct', '%P', '%D', '%s'].join(US) + RS;
+/** Separates co-authors within their field. */
+const GS = '\x1d';
+const CO_AUTHORS = '%(trailers:key=Co-authored-by,valueonly,unfold,separator=%x1d)';
+const LOG_FORMAT = ['%H', '%h', '%an', '%ae', '%ar', '%aI', '%ct', '%P', '%D', CO_AUTHORS, '%s'].join(US) + RS;
+
+/** "Name <email>" (or just a name) from a trailer. */
+export function parsePerson(value: string): Person {
+  const m = /^(.*?)\s*<([^>]*)>\s*$/.exec(value.trim());
+  return m ? { name: m[1] || m[2], email: m[2] } : { name: value.trim(), email: '' };
+}
 
 async function runLog(git: Git, args: string[]): Promise<Commit[]> {
   // 128: unborn branch (no commits yet), or a SHA that doesn't exist
@@ -89,7 +105,8 @@ async function runLog(git: Git, args: string[]): Promise<Commit[]> {
     timestamp: Number(f[6]),
     parents: splitList(f[7], ' '),
     refs: splitList(f[8], ', '),
-    subject: f[9] ?? '',
+    coAuthors: splitList(f[9], GS).map(parsePerson),
+    subject: f[10] ?? '',
   }));
 }
 

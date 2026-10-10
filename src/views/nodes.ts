@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { LocalBranch, RefPair, Remote, RemoteBranch, Stash, Tag, Worktree } from '../git/queries';
+import type { LocalBranch, Person, RefPair, Remote, RemoteBranch, Stash, Tag, Worktree } from '../git/queries';
 import type { TodoEntry } from '../git/todo';
 
 export interface CommitNode {
@@ -18,6 +18,7 @@ export interface CommitNode {
   index: number;
   author?: string;
   authorEmail?: string;
+  coAuthors?: Person[];
   /** Author date, ISO 8601. */
   date?: string;
   refs?: string[];

@@ -13,7 +13,7 @@ import {
 import type { Git } from '../git/runner';
 import { BaseProvider } from './baseProvider';
 import type { CommitNode, Node, RefNode, RemoteNode, SectionNode, WorktreeNode } from './nodes';
-import { commitFiles, commitLabel, config } from './providers';
+import { coAuthorLines, commitFiles, commitLabel, config } from './providers';
 
 const SECTIONS: Record<SectionNode['section'], { label: string; icon: string; expanded: boolean }> = {
   local: { label: 'Local Branches', icon: 'git-branch', expanded: true },
@@ -210,7 +210,7 @@ function commitItem(node: CommitNode): vscode.TreeItem {
   const item = new vscode.TreeItem(commitLabel(node), vscode.TreeItemCollapsibleState.Collapsed);
   item.id = `ref:${node.parentRev}:${node.sha}`;
   item.description = node.relDate;
-  item.tooltip = `${node.sha}\n${node.author}, ${node.relDate}\n\n${node.subject}`;
+  item.tooltip = [node.sha, `${node.author}, ${node.relDate}`, ...coAuthorLines(node), '', node.subject].join('\n');
   item.iconPath = new vscode.ThemeIcon('git-commit');
   item.contextValue = 'refcommit';
   return item;

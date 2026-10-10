@@ -80,7 +80,7 @@ Commit icons are green when the commit is already on the upstream branch and yel
 
 All rewrites use `git rebase --interactive --autostash`, so a dirty working tree is fine. When a rebase stops (on conflicts, or at a commit you chose to edit), the status bar and the view toolbar offer **Continue / Skip / Abort**. The remaining rebase steps appear at the top of the Commits view, where you can reorder them or change their action (pick, reword, squash, fixup, edit, drop) before continuing. Reword asks for the new message right away and applies it when the rebase gets to that commit.
 
-Each commit shows its SHA, author initials and message, as in lazygit, followed by its relative date, branches and tags. In a narrow view only the end of the message is cut off; the tooltip has the full message, author, date and email. Merge commits get a merge icon.
+Each commit shows its SHA, author initials and message, as in lazygit, followed by its relative date, branches and tags. Co-authors (`Co-authored-by` trailers) are added to the initials, e.g. `AL+GH`, and listed in the tooltip and the Commit Graph. In a narrow view only the end of the message is cut off; the tooltip has the full message, author, co-authors, date and email. Merge commits get a merge icon.
 
 **Search:** the search button matches text in the message or author name (case-insensitive), or a SHA prefix. Squash and move are disabled while searching, since the neighbouring commits are hidden.
 

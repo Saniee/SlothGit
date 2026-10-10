@@ -163,7 +163,11 @@ describe('history', { concurrency }, () => {
     assert.equal(r.sh('log', '-1', '--format=%an', r.sha('c2')), 'Test');
     await r.ops.addCoAuthor(r.sha('c3'), 'Pair <pair@example.com>');
     assert.match(r.sh('log', '-1', '--format=%B', 'HEAD'), /Co-authored-by: Pair <pair@example.com>/);
+    await r.ops.addCoAuthor(r.sha('c3'), 'Second');
     assert.deepEqual(r.subjects(), ['c3', 'c2', 'c1']);
+    const [c3, c2] = await getLog(r.git, 2);
+    assert.deepEqual(c3.coAuthors, [{ name: 'Pair', email: 'pair@example.com' }, { name: 'Second', email: '' }], 'listed in the log');
+    assert.deepEqual(c2.coAuthors, []);
     assert.equal(await getOperation(r.git), undefined);
   });
 

@@ -635,6 +635,8 @@ scenario('commit: amend author (reset, set, co-author)', async (t) => {
     input('Grace Hopper <grace@example.com>'),
   ]);
   assert.match(t.sh('log', '-1', '--format=%B'), /Co-authored-by: Grace Hopper <grace@example.com>/);
+  const shown = await t.commit('Add profile page');
+  assert.deepEqual(shown.coAuthors, [{ name: 'Grace Hopper', email: 'grace@example.com' }], 'the Commits view lists the co-author');
   assert.equal(t.status(), BASELINE);
 });
 

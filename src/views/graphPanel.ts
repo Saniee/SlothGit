@@ -3,7 +3,7 @@
 // Commits view's own commands, through VS Code's webview context menu.
 import * as vscode from 'vscode';
 import { layoutGraph, parseRefs, type GraphRef, type GraphRow } from '../git/graph';
-import { getCommitMessage, getLog, getRemotes, getUnpushed, notOnHead, type Commit } from '../git/queries';
+import { getCommitMessage, getLog, getRemotes, getUnpushed, notOnHead, type Commit, type Person } from '../git/queries';
 import type { RepoManager } from '../repoManager';
 import { graphHtml } from './graphHtml';
 import type { CommitNode, FileNode } from './nodes';
@@ -16,6 +16,7 @@ export interface GraphCommit {
   subject: string;
   author: string;
   email: string;
+  coAuthors: Person[];
   relDate: string;
   date: string;
   parents: string[];
@@ -136,6 +137,7 @@ export class GraphPanel implements vscode.Disposable {
       subject: c.subject,
       author: c.author,
       email: c.authorEmail,
+      coAuthors: c.coAuthors,
       relDate: c.relDate,
       date: c.date,
       parents: c.parents,

@@ -79,6 +79,9 @@ export function graphHtml(webview: vscode.Webview): string {
   .pill.tag { color: var(--vscode-charts-yellow); }
   .author, .date, .sha { overflow: hidden; text-overflow: ellipsis; color: var(--vscode-descriptionForeground); padding-left: 8px; }
   .author { display: flex; gap: 6px; align-items: center; }
+  .author .avatars { display: flex; flex: none; }
+  .author .avatars .avatar + .avatar { margin-left: -5px; box-shadow: 0 0 0 1px var(--vscode-editor-background); }
+  .author .names { overflow: hidden; text-overflow: ellipsis; }
   .avatar {
     flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
     font-size: 9px; font-weight: 600; color: var(--vscode-editor-background);
@@ -204,11 +207,16 @@ export function graphHtml(webview: vscode.Webview): string {
       subject.title = r.subject;
       desc.appendChild(subject);
       const author = el('div', 'author');
-      const avatar = el('span', 'avatar', initials(r.author));
-      avatar.style.background = 'hsl(' + hue(r.email || r.author) + ', 55%, 60%)';
-      author.appendChild(avatar);
-      author.appendChild(el('span', '', r.author));
-      author.title = r.author + ' <' + r.email + '>';
+      const people = [{ name: r.author, email: r.email }].concat(r.coAuthors);
+      const avatars = el('span', 'avatars');
+      for (const p of people) {
+        const avatar = el('span', 'avatar', initials(p.name));
+        avatar.style.background = 'hsl(' + hue(p.email || p.name) + ', 55%, 60%)';
+        avatars.appendChild(avatar);
+      }
+      author.appendChild(avatars);
+      author.appendChild(el('span', 'names', people.map(function (p) { return p.name; }).join(', ')));
+      author.title = people.map(function (p, i) { return (i ? 'Co-author: ' : 'Author: ') + p.name + (p.email ? ' <' + p.email + '>' : ''); }).join('\\n');
       const date = el('div', 'date', r.relDate);
       date.title = new Date(r.date).toLocaleString();
       const sha = el('div', 'sha', r.shortSha);
@@ -239,7 +247,7 @@ export function graphHtml(webview: vscode.Webview): string {
     details.appendChild(el('h3', '', lines[0]));
     const parents = r.parents.map(function (p) { return p.slice(0, 7); }).join(', ');
     details.appendChild(el('div', 'meta',
-      r.author + ' <' + r.email + '>, ' + new Date(r.date).toLocaleString() + ' · ' + r.sha.slice(0, 10) + (parents ? ' · parents ' + parents : '')));
+      r.author + ' <' + r.email + '>' + r.coAuthors.map(function (p) { return ', with ' + p.name + (p.email ? ' <' + p.email + '>' : ''); }).join('') + ', ' + new Date(r.date).toLocaleString() + ' · ' + r.sha.slice(0, 10) + (parents ? ' · parents ' + parents : '')));
     const body = lines.slice(1).join('\\n').trim();
     if (body) details.appendChild(el('pre', '', body));
     for (const f of m.files) {
