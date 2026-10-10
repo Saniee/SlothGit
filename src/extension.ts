@@ -78,6 +78,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodeGi
   }
 
   async function refreshAll(force: boolean): Promise<void> {
+    await repos.markLoaded();
     await Promise.all([
       commits.reload(force),
       branches.reload(force),

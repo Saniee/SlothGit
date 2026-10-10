@@ -104,7 +104,7 @@ npm install
 npm test          # builds, then runs unit tests plus real-git integration tests
 npm run playground  # builds ../codegit-playground: a repo with a scenario for every feature (see TESTING.md)
 npm run smoke     # opens your installed VS Code with a throwaway profile and walks every view in a scratch repo
-npm run e2e       # runs every TESTING.md item against the playground in VS Code (~7 min; `npm run e2e -- stash` for a subset)
+npm run e2e       # runs every TESTING.md item against the playground in VS Code (~4 min; `npm run e2e -- stash` for a subset)
 npm run watch     # rebuild on change
 ```
 

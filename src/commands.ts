@@ -221,7 +221,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       const git = repos.git();
       if (!node || !git || !(await canRewrite([node]))) return;
       const original = await getCommitMessage(git, node.sha);
-      const file = path.resolve(git.cwd, (await git.run(['rev-parse', '--git-path', 'CODEGIT_EDITMSG'])).trim());
+      const file = await git.gitDirPath('CODEGIT_EDITMSG');
       const edited = await editInEditor(file, original, `Reword ${node.shortSha}`);
       if (edited === undefined || edited === original) return;
       if (!(await confirmRewrite([node]))) return;

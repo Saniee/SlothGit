@@ -42,13 +42,14 @@ export class BranchesProvider extends BaseProvider<SectionNode> {
   }
 
   protected async load(git: Git): Promise<SectionNode[]> {
-    const [local, remotes, tags, worktrees] = await Promise.all([
+    const remoteList = getRemotes(git);
+    const [local, remotes, remoteBranches, tags, worktrees] = await Promise.all([
       getLocalBranches(git, config<BranchSort>('branchSort', 'recency')),
-      getRemotes(git),
+      remoteList,
+      getRemoteBranches(git, remoteList),
       getTags(git),
       getWorktrees(git),
     ]);
-    const remoteBranches = await getRemoteBranches(git, remotes);
 
     const localNodes: RefNode[] = local.map((branch) => ({
       kind: 'ref',

@@ -13,6 +13,8 @@ export abstract class BaseProvider<TRoot extends Node> implements vscode.TreeDat
   private stale = true;
   private view: vscode.TreeView<Node> | undefined;
   private queue: Promise<void> = Promise.resolve();
+  /** The queued reload that hasn't started yet; later requests join it, as it will see their changes. */
+  private pending: { force: boolean; done: Promise<void> } | undefined;
 
   private readonly emitter = new vscode.EventEmitter<Node | undefined | void>();
   readonly onDidChangeTreeData = this.emitter.event;
@@ -33,10 +35,20 @@ export abstract class BaseProvider<TRoot extends Node> implements vscode.TreeDat
   }
 
   reload(force = false): Promise<void> {
-    this.queue = this.queue
-      .then(() => this.doReload(force))
+    if (this.pending) {
+      this.pending.force ||= force;
+      return this.pending.done;
+    }
+    const pending = { force, done: Promise.resolve() };
+    pending.done = this.queue
+      .then(() => {
+        this.pending = undefined;
+        return this.doReload(pending.force);
+      })
       .catch((error) => this.output.error(`Failed to load ${this.constructor.name}: ${error}`));
-    return this.queue;
+    this.pending = pending;
+    this.queue = pending.done;
+    return pending.done;
   }
 
   /** Re-render existing items without reloading data. */

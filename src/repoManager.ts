@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { buildEditorCommand, GitOps } from './git/operations';
 import { Git } from './git/runner';
+import { repoSignature } from './git/signature';
 import type { API, Repository } from './types/git';
 
 /** Tracks which repository CodeGit is showing and signals when it (or its state) changes. */
@@ -8,6 +9,8 @@ export class RepoManager implements vscode.Disposable {
   private current: Repository | undefined;
   private stateListener: vscode.Disposable | undefined;
   private debounce: NodeJS.Timeout | undefined;
+  /** repoSignature when the views last loaded. */
+  private signature: string | undefined;
   private readonly disposables: vscode.Disposable[] = [];
   private readonly editorCommand: string;
 
@@ -45,6 +48,16 @@ export class RepoManager implements vscode.Disposable {
     return git && new GitOps(git, this.editorCommand);
   }
 
+  /** Call when the views (re)load, so later state events that change nothing they show don't reload them again. */
+  async markLoaded(): Promise<void> {
+    this.signature = await this.currentSignature();
+  }
+
+  private async currentSignature(): Promise<string | undefined> {
+    const git = this.git();
+    return git && repoSignature(git).catch(() => undefined);
+  }
+
   async pickRepository(): Promise<void> {
     const items = this.api.repositories.map((repo) => ({
       label: vscode.workspace.asRelativePath(repo.rootUri, false) || repo.rootUri.fsPath,
@@ -66,6 +79,7 @@ export class RepoManager implements vscode.Disposable {
   private select(repo: Repository | undefined): void {
     if (repo === this.current) return;
     this.current = repo;
+    this.signature = undefined;
     this.stateListener?.dispose();
     this.stateListener = repo?.state.onDidChange(() => this.scheduleChange());
     void vscode.commands.executeCommand('setContext', 'codegit.hasRepository', !!repo);
@@ -74,7 +88,12 @@ export class RepoManager implements vscode.Disposable {
 
   private scheduleChange(): void {
     clearTimeout(this.debounce);
-    this.debounce = setTimeout(() => this.changeEmitter.fire(), 250);
+    // The Git extension reports every change, including edits to files; CodeGit's views only show refs and history.
+    this.debounce = setTimeout(async () => {
+      const signature = await this.currentSignature();
+      if (signature !== undefined && signature === this.signature) return;
+      this.changeEmitter.fire();
+    }, 250);
   }
 
   dispose(): void {

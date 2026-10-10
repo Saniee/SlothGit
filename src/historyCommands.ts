@@ -93,6 +93,14 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
     }
   }
 
+  /** Changes what the Commits view lists. Only that view depends on it, and nothing reloads when nothing changed. */
+  async function setView(change: Partial<Pick<CommitsProvider, 'filterPath' | 'search' | 'allBranches'>>): Promise<void> {
+    const keys = Object.keys(change) as (keyof typeof change)[];
+    if (keys.every((key) => commits[key] === change[key])) return;
+    Object.assign(commits, change);
+    await commits.reload(true);
+  }
+
   // --- rebase todo -------------------------------------------------------------------
 
   async function editTodo(arg: Node | undefined, change: (node: TodoNode) => Parameters<typeof transformTodo>[1] | undefined) {
@@ -189,14 +197,10 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
       const rel = target.fsPath.startsWith(root.fsPath)
         ? target.fsPath.slice(root.fsPath.length + 1).replace(/\\/g, '/')
         : relative;
-      commits.filterPath = rel || '.';
-      await deps.refreshAll(true);
+      await setView({ filterPath: rel || '.' });
       await vscode.commands.executeCommand('codegit.commits.focus');
     },
-    'codegit.commits.clearFilter': async () => {
-      commits.filterPath = undefined;
-      await deps.refreshAll(true);
-    },
+    'codegit.commits.clearFilter': () => setView({ filterPath: undefined }),
 
     'codegit.commits.search': async () => {
       const query = await vscode.window.showInputBox({
@@ -206,22 +210,12 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
         prompt: 'Case-insensitive. Leave empty to show all commits.',
       });
       if (query === undefined) return;
-      commits.search = query.trim() || undefined;
-      await deps.refreshAll(true);
+      await setView({ search: query.trim() || undefined });
       await vscode.commands.executeCommand('codegit.commits.focus');
     },
-    'codegit.commits.clearSearch': async () => {
-      commits.search = undefined;
-      await deps.refreshAll(true);
-    },
-    'codegit.commits.showAllBranches': async () => {
-      commits.allBranches = true;
-      await deps.refreshAll(true);
-    },
-    'codegit.commits.showCurrentBranch': async () => {
-      commits.allBranches = false;
-      await deps.refreshAll(true);
-    },
+    'codegit.commits.clearSearch': () => setView({ search: undefined }),
+    'codegit.commits.showAllBranches': () => setView({ allBranches: true }),
+    'codegit.commits.showCurrentBranch': () => setView({ allBranches: false }),
 
     'codegit.todo.moveUp': (arg?: Node) => editTodo(arg, (node) => ({ move: { sha: node.sha, direction: 'up' } })),
     'codegit.todo.moveDown': (arg?: Node) => editTodo(arg, (node) => ({ move: { sha: node.sha, direction: 'down' } })),

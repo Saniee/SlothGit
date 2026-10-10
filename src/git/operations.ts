@@ -89,12 +89,15 @@ export class GitOps {
     plan: RebasePlan,
     options: { message?: string; autosquash?: boolean; onto?: string } = {},
   ): Promise<void> {
-    await this.assertNotMerges([
-      ...Object.keys(plan.actions ?? {}),
-      ...(plan.move ? [plan.move.sha] : []),
-      ...(plan.fixupInto ? [plan.fixupInto.target] : []),
+    const [, hasMerges] = await Promise.all([
+      this.assertNotMerges([
+        ...Object.keys(plan.actions ?? {}),
+        ...(plan.move ? [plan.move.sha] : []),
+        ...(plan.fixupInto ? [plan.fixupInto.target] : []),
+      ]),
+      this.hasMerges(base),
     ]);
-    const merges = (await this.hasMerges(base)) ? ['--rebase-merges'] : [];
+    const merges = hasMerges ? ['--rebase-merges'] : [];
     const env: Record<string, string> = {
       GIT_SEQUENCE_EDITOR: this.editorCommand,
       GIT_EDITOR: this.editorCommand,
@@ -147,11 +150,11 @@ export class GitOps {
   async squash(shas: string[], action: 'squash' | 'fixup'): Promise<void> {
     const oldest = await this.oldest(shas);
     if (!(await this.hasParent(oldest))) throw new UserError('The first commit has no previous commit to squash into.');
-    const parents = (await this.git.run(['rev-parse', ...shas.map((sha) => `${sha}^`)])).split(/\s+/).filter(Boolean);
-    if ((await this.git.run(['rev-list', '--no-walk', '--merges', ...parents])).trim()) {
-      throw new UserError("The commit before it is a merge commit, which can't be squashed into.");
-    }
-    const base = await this.ancestor(oldest, 2);
+    const [parentMerges, base] = await Promise.all([
+      this.git.run(['rev-list', '--no-walk', '--merges', ...shas.map((sha) => `${sha}^`)]),
+      this.ancestor(oldest, 2),
+    ]);
+    if (parentMerges.trim()) throw new UserError("The commit before it is a merge commit, which can't be squashed into.");
     await this.rebase(base, { actions: GitOps.actions(shas, action) });
   }
 
@@ -232,7 +235,7 @@ export class GitOps {
       const parent = (await this.hasParent(sha)) ? `${sha}^` : EMPTY_TREE;
       const paths = changes.flatMap((c) => (c.oldPath ? [c.oldPath, c.path] : [c.path]));
       const patch = await this.git.run(['diff', '--binary', parent, sha, '--', ...paths]);
-      patchFile = path.resolve(this.git.cwd, (await this.git.run(['rev-parse', '--git-path', 'codegit-uncommit.patch'])).trim());
+      patchFile = await this.git.gitDirPath('codegit-uncommit.patch');
       fs.writeFileSync(patchFile, patch);
     }
 
@@ -248,11 +251,6 @@ export class GitOps {
     });
 
     if (patchFile) return this.applyToWorkingTree(patchFile);
-  }
-
-  /** Path of a scratch file in the git directory. */
-  private async gitFile(name: string): Promise<string> {
-    return path.resolve(this.git.cwd, (await this.git.run(['rev-parse', '--git-path', name])).trim());
   }
 
   /** Applies changes taken out of a commit to the index and working tree; if that fails, says where they are kept. */
@@ -285,8 +283,8 @@ export class GitOps {
     patch: string,
     target: 'discard' | 'index' | { newCommit: string },
   ): Promise<string | void> {
-    const patchFile = await this.gitFile('codegit-patch.patch');
-    const restoreFile = await this.gitFile('codegit-uncommit.patch');
+    const patchFile = await this.git.gitDirPath('codegit-patch.patch');
+    const restoreFile = await this.git.gitDirPath('codegit-uncommit.patch');
     fs.writeFileSync(patchFile, patch);
     try {
       await this.atCommit(sha, async () => {

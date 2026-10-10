@@ -213,10 +213,8 @@ export async function getOperation(git: Git): Promise<Operation | undefined> {
     ['REVERT_HEAD', 'revert'],
     ['MERGE_HEAD', 'merge'],
   ];
-  const output = await git.run(['rev-parse', ...markers.flatMap(([m]) => ['--git-path', m])]);
-  const paths = output.split(/\r?\n/);
-  for (let i = 0; i < markers.length; i++) {
-    if (paths[i] && fs.existsSync(path.resolve(git.cwd, paths[i]))) return markers[i][1];
+  for (const [marker, operation] of markers) {
+    if (fs.existsSync(await git.gitDirPath(marker))) return operation;
   }
   return undefined;
 }
@@ -308,7 +306,10 @@ export async function getLocalBranches(git: Git, sort: BranchSort = 'date'): Pro
     '%(worktreepath)',
   ];
   const order = sort === 'name' ? 'refname' : '-committerdate';
-  const output = await git.run(['for-each-ref', `--sort=${order}`, `--format=${fields.join(US)}${RS}`, 'refs/heads']);
+  const [output, recent] = await Promise.all([
+    git.run(['for-each-ref', `--sort=${order}`, `--format=${fields.join(US)}${RS}`, 'refs/heads']),
+    sort === 'recency' ? getRecentCheckouts(git) : Promise.resolve([]),
+  ]);
   const root = path.resolve(git.cwd);
   const branches = records(output).map((f) => ({
     name: f[0],
@@ -322,7 +323,6 @@ export async function getLocalBranches(git: Git, sort: BranchSort = 'date'): Pro
   }));
   if (sort === 'recency') {
     // lazygit's default: most recently checked out first, from the reflog.
-    const recent = await getRecentCheckouts(git);
     const rank = (name: string) => {
       const i = recent.indexOf(name);
       return i < 0 ? Number.MAX_SAFE_INTEGER : i;
@@ -343,11 +343,12 @@ export async function getRemotes(git: Git): Promise<Remote[]> {
   return [...remotes].map(([name, url]) => ({ name, url }));
 }
 
-export async function getRemoteBranches(git: Git, remotes: Remote[]): Promise<RemoteBranch[]> {
+/** `remotes` may still be loading; the refs are read meanwhile. */
+export async function getRemoteBranches(git: Git, remotes: Remote[] | Promise<Remote[]>): Promise<RemoteBranch[]> {
   const fields = ['%(refname)', '%(refname:short)', '%(objectname)', '%(symref)', '%(committerdate:relative)', '%(contents:subject)'];
   const output = await git.run(['for-each-ref', '--sort=refname', `--format=${fields.join(US)}${RS}`, 'refs/remotes']);
   // Longest remote name first, in case one remote name is a prefix of another.
-  const names = remotes.map((r) => r.name).sort((a, b) => b.length - a.length);
+  const names = (await remotes).map((r) => r.name).sort((a, b) => b.length - a.length);
   const branches: RemoteBranch[] = [];
   for (const f of records(output)) {
     if (f[3]) continue; // origin/HEAD
@@ -451,14 +452,10 @@ export interface BisectState {
   terms: { bad: string; good: string };
 }
 
-async function gitPath(git: Git, name: string): Promise<string> {
-  return path.resolve(git.cwd, (await git.run(['rev-parse', '--git-path', name])).trim());
-}
-
 export async function getBisectState(git: Git): Promise<BisectState | undefined> {
-  const startFile = await gitPath(git, 'BISECT_START');
+  const startFile = await git.gitDirPath('BISECT_START');
   if (!fs.existsSync(startFile)) return undefined;
-  const termsFile = await gitPath(git, 'BISECT_TERMS');
+  const termsFile = await git.gitDirPath('BISECT_TERMS');
   const [badTerm = 'bad', goodTerm = 'good'] = fs.existsSync(termsFile)
     ? fs.readFileSync(termsFile, 'utf8').split(/\r?\n/).filter(Boolean)
     : [];
@@ -483,7 +480,7 @@ export async function getBisectState(git: Git): Promise<BisectState | undefined>
 // --- rebase todo -----------------------------------------------------------------------
 
 export async function rebaseTodoPath(git: Git): Promise<string> {
-  return gitPath(git, 'rebase-merge/git-rebase-todo');
+  return git.gitDirPath('rebase-merge/git-rebase-todo');
 }
 
 /** Remaining steps of a paused interactive rebase, next one first. */

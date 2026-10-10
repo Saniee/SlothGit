@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 export class GitError extends Error {
   constructor(
@@ -24,6 +26,16 @@ export interface ExecResult {
   stderr: string;
   exitCode: number;
 }
+
+export interface GitDirs {
+  /** This working tree's git directory: HEAD, index, rebase-merge, ... */
+  gitDir: string;
+  /** The directory shared by all worktrees: refs, config, ... Same as gitDir outside linked worktrees. */
+  commonDir: string;
+}
+
+/** Per working tree folder, so looking up files in the git directory doesn't run git each time. */
+const gitDirs = new Map<string, Promise<GitDirs>>();
 
 /** Thin wrapper around the git CLI, bound to one repository. Has no vscode dependency so it can be tested with plain node. */
 export class Git {
@@ -59,5 +71,26 @@ export class Git {
 
   async run(args: string[], options?: ExecOptions): Promise<string> {
     return (await this.exec(args, options)).stdout;
+  }
+
+  /**
+   * Path of `name` in the git directory, as `git rev-parse --git-path` gives it for per-worktree files
+   * (rebase-merge, MERGE_HEAD, BISECT_START, scratch files). Not for shared ones like refs or objects.
+   */
+  async gitDirPath(name: string): Promise<string> {
+    return path.join((await this.dirs()).gitDir, name);
+  }
+
+  async dirs(): Promise<GitDirs> {
+    let dirs = gitDirs.get(this.cwd);
+    if (!dirs || !fs.existsSync((await dirs.catch(() => undefined))?.gitDir ?? '')) {
+      dirs = this.run(['rev-parse', '--absolute-git-dir', '--git-common-dir']).then((out) => {
+        const [gitDir, commonDir] = out.trim().split(/\r?\n/);
+        return { gitDir, commonDir: path.resolve(this.cwd, commonDir) };
+      });
+      gitDirs.set(this.cwd, dirs);
+      dirs.catch(() => gitDirs.delete(this.cwd));
+    }
+    return dirs;
   }
 }

@@ -207,7 +207,11 @@ export class Context {
     ]) {
       await vscode.commands.executeCommand(id);
     }
-    await vscode.workspace.getConfiguration('codegit').update('branchSort', undefined, vscode.ConfigurationTarget.Global);
+    const settings = vscode.workspace.getConfiguration('codegit');
+    // Only when set: changing settings reloads every view.
+    if (settings.inspect('branchSort')?.globalValue !== undefined) {
+      await settings.update('branchSort', undefined, vscode.ConfigurationTarget.Global);
+    }
     sync(this.snapshot, this.playground);
     await this.refresh();
     prompts.reset();
@@ -250,14 +254,17 @@ export class Context {
   }
   /** Discards the playground's uncommitted changes, for scenarios that switch branches. */
   async cleanTree(): Promise<void> {
-    this.sh('reset', '-q', '--hard');
-    this.sh('clean', '-qfd');
+    this.discardChanges();
     await this.refresh();
   }
   async checkout(branch: string): Promise<void> {
-    await this.cleanTree();
+    this.discardChanges();
     this.sh('switch', '-q', branch);
     await this.refresh();
+  }
+  private discardChanges(): void {
+    this.sh('reset', '-q', '--hard');
+    this.sh('clean', '-qfd');
   }
 
   // --- CodeGit ---
