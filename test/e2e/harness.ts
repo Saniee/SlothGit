@@ -204,6 +204,7 @@ export class Context {
       'codegit.commit.clearBase',
       'codegit.compare.clear',
       'codegit.commit.clearCherryPick',
+      'codegit.patch.reset',
     ]) {
       await vscode.commands.executeCommand(id);
     }

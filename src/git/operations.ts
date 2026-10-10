@@ -278,6 +278,78 @@ export class GitOps {
     }
   }
 
+  /**
+   * The changes `removal` (from removalPatch, possibly for several files) takes out of commit `sha`, as a forward
+   * patch with blob ids, so it can be applied elsewhere with a 3-way merge.
+   */
+  async patchContent(sha: string, removal: string): Promise<string> {
+    const index = await this.git.gitDirPath('codegit-patch-index');
+    const removalFile = await this.git.gitDirPath('codegit-patch.patch');
+    fs.writeFileSync(removalFile, removal);
+    // A scratch index, so the real one and the working tree are untouched.
+    const env = { GIT_INDEX_FILE: index };
+    try {
+      await this.git.exec(['read-tree', sha], { env });
+      await this.git.exec(['apply', '--cached', '--recount', removalFile], { env });
+      const without = (await this.git.run(['write-tree'], { env })).trim();
+      return await this.git.run(['diff', '--binary', without, sha]);
+    } finally {
+      fs.rmSync(index, { force: true });
+      fs.rmSync(removalFile, { force: true });
+    }
+  }
+
+  /**
+   * Moves the changes `removal` takes out of commit `sha` into commit `target`, older or newer (lazygit's "move
+   * patch into selected commit"). If they don't apply to `target`, history is put back as it was.
+   */
+  async movePatchToCommit(sha: string, removal: string, target: string): Promise<void> {
+    if (sha === target) throw new UserError('Pick a different commit to move the changes into.');
+    // Found again by its distance from HEAD after the first rewrite, which changes it if it is newer than `sha`.
+    const distance = parseInt(await this.git.run(['rev-list', '--first-parent', '--count', `${target}..HEAD`]), 10);
+    const resolved = await this.git.exec(['rev-parse', '--verify', '-q', `HEAD~${distance}`], { allowedExitCodes: [1] });
+    if (resolved.stdout.trim() !== target) throw new UserError('The target commit must be on the current branch, not on a merged-in branch.');
+    await this.assertNotMerges([target]);
+    const forward = await this.patchContent(sha, removal);
+    const original = await headSha(this.git);
+    await this.removePatchFromCommit(sha, removal, 'discard');
+
+    const patchFile = await this.git.gitDirPath('codegit-move.patch');
+    fs.writeFileSync(patchFile, forward);
+    try {
+      const newTarget = (await this.git.run(['rev-parse', `HEAD~${distance}`])).trim();
+      await this.atCommit(newTarget, async () => {
+        await this.git.exec(['apply', '--index', '--3way', patchFile]);
+        await this.git.exec(['commit', '--amend', '--no-edit', '--allow-empty', '--no-verify']);
+      });
+    } catch (error) {
+      // Undo the first step; --keep leaves uncommitted changes alone.
+      const back = await this.git.exec(['reset', '--keep', original], { allowedExitCodes: [128] });
+      const reason = error instanceof Error ? error.message.split('\n')[0] : String(error);
+      throw new UserError(
+        back.exitCode === 0
+          ? `The changes don't apply to ${target.slice(0, 7)}, so nothing was changed (${reason}).`
+          : `The changes don't apply to ${target.slice(0, 7)} (${reason}). They were taken out of ${sha.slice(0, 7)}; the original history is ${original.slice(0, 10)}.`,
+      );
+    } finally {
+      fs.rmSync(patchFile, { force: true });
+    }
+  }
+
+  /** Applies the changes `removal` takes out of commit `sha` to the working tree, or reverts them there with `reverse`. */
+  async applyPatch(sha: string, removal: string, reverse: boolean): Promise<void> {
+    const patchFile = await this.git.gitDirPath('codegit-apply.patch');
+    fs.writeFileSync(patchFile, await this.patchContent(sha, removal));
+    const flags = reverse ? ['--reverse'] : [];
+    try {
+      // Unstaged when it applies as is; otherwise a 3-way merge, which stages what it merges and marks conflicts.
+      const plain = await this.git.exec(['apply', ...flags, patchFile], { allowedExitCodes: [1] });
+      if (plain.exitCode !== 0) await this.git.exec(['apply', '--3way', ...flags, patchFile]);
+    } finally {
+      fs.rmSync(patchFile, { force: true });
+    }
+  }
+
   /** `git diff` of one file of commit `sha`, parsed for building partial patches (see patch.ts). */
   async commitFileDiff(sha: string, change: FileChange): Promise<FileDiff> {
     const parent = (await this.hasParent(sha)) ? `${sha}^` : EMPTY_TREE;

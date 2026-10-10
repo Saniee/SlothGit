@@ -8,6 +8,7 @@ import { createRunner } from './runner';
 import type { GitExtension } from './types/git';
 import { BranchesProvider } from './views/branches';
 import { CherryPickClipboard } from './views/cherryPickClipboard';
+import { CustomPatch } from './views/customPatch';
 import { GraphPanel } from './views/graphPanel';
 import type { Node } from './views/nodes';
 import { CommitsProvider, ReflogProvider, StashProvider } from './views/providers';
@@ -38,6 +39,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodeGi
 
   const repos = new RepoManager(gitExtension.getAPI(1), context.asAbsolutePath('dist/rebaseEditor.js'));
   const clipboard = new CherryPickClipboard();
+  const patch = new CustomPatch();
   const commits = new CommitsProvider(repos, output, clipboard);
   const stashes = new StashProvider(repos, output);
   const reflog = new ReflogProvider(repos, output);
@@ -93,6 +95,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodeGi
   context.subscriptions.push(
     repos,
     clipboard,
+    patch,
     commitsView,
     branchesView,
     stashView,
@@ -107,7 +110,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodeGi
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('codegit')) void refreshAll(true);
     }),
-    ...registerCommands({ repos, commits, commitsView, stashView, clipboard, runner, refreshAll }),
+    ...registerCommands({ repos, commits, commitsView, stashView, clipboard, patch, runner, refreshAll }),
     ...registerBranchCommands({ repos, branches, branchesView, commits, runner }),
     ...registerHistoryCommands({ repos, commits, commitsView, runner, refreshAll }),
     vscode.commands.registerCommand('codegit.graph.open', () => GraphPanel.show(context, repos)),

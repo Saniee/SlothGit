@@ -520,6 +520,32 @@
         "category": "CodeGit"
       },
       {
+        "command": "codegit.patch.add",
+        "title": "Add Selected Changes to Custom Patch",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.file.addToPatch",
+        "title": "Add to Custom Patch",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.patch.menu",
+        "title": "Custom Patch…",
+        "category": "CodeGit",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "codegit.patch.reset",
+        "title": "Reset Custom Patch",
+        "category": "CodeGit"
+      },
+      {
+        "command": "codegit.commit.movePatchHere",
+        "title": "Move Custom Patch into This Commit",
+        "category": "CodeGit"
+      },
+      {
         "command": "codegit.patch.remove",
         "title": "Remove Selected Changes from Commit",
         "category": "CodeGit"
@@ -858,6 +884,11 @@
           "command": "codegit.graph.open",
           "when": "view == codegit.commits",
           "group": "navigation@11"
+        },
+        {
+          "command": "codegit.patch.menu",
+          "when": "view == codegit.commits && codegit.hasPatch",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
@@ -925,6 +956,11 @@
           "command": "codegit.commit.pasteCherryPick",
           "when": "view == codegit.commits && codegit.hasCherryPicks",
           "group": "2_cherry@2"
+        },
+        {
+          "command": "codegit.commit.movePatchHere",
+          "when": "view == codegit.commits && codegit.hasPatch && viewItem =~ /^commit(?!.*:other)/",
+          "group": "2_cherry@3"
         },
         {
           "command": "codegit.commit.checkout",
@@ -1277,6 +1313,11 @@
           "group": "2_patch@2"
         },
         {
+          "command": "codegit.file.addToPatch",
+          "when": "view == codegit.commits && viewItem == file:log",
+          "group": "2_patch@3"
+        },
+        {
           "command": "codegit.branch.createPullRequest",
           "when": "view == codegit.branches && viewItem =~ /^branch:/",
           "group": "3_sync@8"
@@ -1323,6 +1364,26 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "codegit.patch.add",
+          "when": "codegit.inCommitDiff"
+        },
+        {
+          "command": "codegit.patch.menu",
+          "when": "codegit.hasPatch"
+        },
+        {
+          "command": "codegit.patch.reset",
+          "when": "codegit.hasPatch"
+        },
+        {
+          "command": "codegit.file.addToPatch",
+          "when": "false"
+        },
+        {
+          "command": "codegit.commit.movePatchHere",
+          "when": "false"
+        },
         {
           "command": "codegit.patch.remove",
           "when": "codegit.inCommitDiff"
@@ -1680,6 +1741,11 @@
         }
       ],
       "editor/context": [
+        {
+          "command": "codegit.patch.add",
+          "when": "codegit.inCommitDiff",
+          "group": "9_codegit@0"
+        },
         {
           "command": "codegit.patch.remove",
           "when": "codegit.inCommitDiff",

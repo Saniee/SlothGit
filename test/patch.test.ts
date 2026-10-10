@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseFileDiff, removalPatch, type LineRange, type Side } from '../src/git/patch';
+import { parseFileDiff, removalPatch, selectionPatch, type LineRange, type Side } from '../src/git/patch';
 
 // Parent:  a b c d e f g h
 // Commit:  a b C d e N1 N2 f g     (c changed, N1 N2 inserted, h deleted)
@@ -108,4 +108,11 @@ test('deleted and binary files are refused', () => {
   assert.throws(() => removalPatch(parseFileDiff(deleted, 'd.txt'), 'old', [{ start: 1, end: 1 }]), /deletes this file/);
   const binary = ['diff --git a/b.bin b/b.bin', 'Binary files a/b.bin and b/b.bin differ', ''].join('\n');
   assert.throws(() => removalPatch(parseFileDiff(binary, 'b.bin'), 'new', [{ start: 1, end: 1 }]), /Binary/);
+});
+
+test('a selection on both sides of the same file makes one patch', () => {
+  const diff = parseFileDiff(DIFF, 'x.txt');
+  const both = selectionPatch(diff, { old: [{ start: 3, end: 3 }], new: [{ start: 6, end: 6, whole: true }] })!;
+  // c comes back (picked on the parent's side), N1 N2 go (picked on the commit's side); h stays deleted.
+  assert.deepEqual(apply(COMMIT, both), ['a', 'b', 'c', 'd', 'e', 'f', 'g']);
 });

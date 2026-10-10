@@ -221,6 +221,46 @@ describe('operations', { concurrency }, () => {
     assert.equal(r.sh('show', 'HEAD:x.txt'), 'a\nb\nC\nd\ne\nN1\nN2\nf\ng\nlast', 'the end result is unchanged');
   });
 
+  test('patch: move selected lines into a newer or an older commit', async () => {
+    const r = setupPatch();
+    const nLines = async () => r.patchFor(r.sha('change'), [{ start: 6, end: 7 }]);
+    const final = r.read('x.txt');
+
+    await r.ops.movePatchToCommit(r.sha('change'), await nLines(), r.sha('later'));
+    assert.deepEqual(r.subjects(), ['later', 'change', 'base', 'c1']);
+    assert.equal(r.sh('show', `${r.sha('change')}:x.txt`), 'a\nb\nC\nd\ne\nf\ng');
+    assert.equal(r.read('x.txt'), final, 'into the newer commit; the end result is unchanged');
+
+    // And back, into the older one.
+    const back = removalPatch(await r.ops.commitFileDiff(r.sha('later'), { status: 'M', path: 'x.txt' }), 'new', [{ start: 6, end: 7 }])!;
+    await r.ops.movePatchToCommit(r.sha('later'), back, r.sha('base'));
+    assert.equal(r.sh('show', `${r.sha('base')}:x.txt`), 'a\nb\nc\nd\ne\nN1\nN2\nf\ng\nh');
+    assert.equal(r.sh('show', `${r.sha('later')}^:x.txt`), 'a\nb\nC\nd\ne\nN1\nN2\nf\ng');
+    assert.equal(r.read('x.txt'), final);
+  });
+
+  test('patch: moving into a commit it does not apply to changes nothing', async () => {
+    const r = setupPatch();
+    const before = r.sh('rev-parse', 'HEAD');
+    const patch = await r.patchFor(r.sha('change'), [{ start: 6, end: 7 }]);
+    // c1 has no x.txt.
+    await assert.rejects(r.ops.movePatchToCommit(r.sha('change'), patch, r.sha('c1')), /nothing was changed/);
+    assert.equal(r.sh('rev-parse', 'HEAD'), before);
+    assert.equal(await getOperation(r.git), undefined);
+  });
+
+  test('patch: apply to the working tree, or in reverse, without changing history', async () => {
+    const r = setupPatch();
+    const before = r.sh('rev-parse', 'HEAD');
+    const patch = await r.patchFor(r.sha('change'), [{ start: 6, end: 7 }]);
+    await r.ops.applyPatch(r.sha('change'), patch, true);
+    assert.equal(r.read('x.txt'), 'a\nb\nC\nd\ne\nf\ng\nlast\n');
+    assert.equal(r.sh('diff', '--cached'), '', 'not staged');
+    await r.ops.applyPatch(r.sha('change'), patch, false);
+    assert.equal(r.sh('status', '--porcelain'), '');
+    assert.equal(r.sh('rev-parse', 'HEAD'), before);
+  });
+
   // --- history with a merge ------------------------------------------------------------
   //
   //   c1 - c2 - m1 ---- merge - c3     (main)

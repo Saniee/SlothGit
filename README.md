@@ -65,6 +65,13 @@ Expand a commit to see its files. For each file you can open the diff or the fil
 
 With no selection, the change under the cursor is used. As with VS Code's **Stage Selected Ranges**, selecting some lines of a changed block also takes the lines they replaced. Later commits that touch the same lines may conflict; Continue / Abort work as for other rewrites.
 
+**Custom patch:** to collect changes from several files or selections of one commit first, use **Add Selected Changes to Custom Patch** in its file diffs, or **Add to Custom Patch** on a file in the Commits view. The status bar shows the patch; click it to:
+
+- remove it from the commit, move it out to the index, or move it to a new commit;
+- move it into another commit, older or newer (also **Move Custom Patch into This Commit** on a commit). If it doesn't apply there, nothing is changed;
+- apply it to the working tree, or apply it in reverse, without changing history;
+- show it, or reset it.
+
 **Merge commits:** rewrites work across merges. When the commits being rewritten include merges, CodeGit rebases with `--rebase-merges`, so the merges are recreated and the branch structure stays the same. A recreated merge is merged again, so conflicts that were resolved in it come back, and changes made by hand in the merge itself are lost. Changes that would break the structure are refused before anything happens: squashing a commit into one on another branch, or moving a commit past a merge. A merge commit itself can't be dropped, reworded or edited yet, except the newest commit, which can be amended. During a paused rebase, merge steps are listed with the other steps but can't be changed.
 
 **Stacked branches:** with `codegit.updateStackedBranches` set to `always` (or git's `rebase.updateRefs` turned on, which the default setting follows), rewriting history also moves other local branches that point at the rewritten commits, like lazygit. That keeps a branch stacked on another one stacked after you change the lower one. A paused rebase lists these branch updates with the other steps, and moving a commit across one moves the commit into that branch. Branches checked out in another worktree are left alone, and undo only moves the current branch back.

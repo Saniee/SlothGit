@@ -65,6 +65,7 @@ Tick off what you tried and note anything odd, such as wrong labels, missing ref
 - [ ] Copy… (each item), open in browser
 - [ ] Commit files: open diff, open at revision, checkout file, remove from commit, move to index, Open All Changes
 - [ ] Line-level patches in a commit's diff (both sides, cursor only, several selections, Open All Changes): remove, move to index, move to new commit
+- [ ] Custom patch: add lines from two files of a commit (and a whole file from its context menu); from the status bar, move it into an older and a newer commit, apply it (and in reverse) to the working tree, show it, reset it. Adding from another commit asks to start over
 - [ ] Filter by file (toolbar, Explorer context menu, editor tab context menu), clear filter
 - [ ] Search by message, author and SHA; clear search
 - [ ] All branches: other branches' commits are dimmed and can't be rewritten

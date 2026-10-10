@@ -17,6 +17,12 @@ export interface LineRange {
   whole?: boolean;
 }
 
+/** Lines picked on either side of one file's diff. */
+export type Selection = Partial<Record<Side, LineRange[]>>;
+
+/** Picks every change in a file. */
+export const WHOLE_FILE: Selection = { new: [{ start: 1, end: Number.MAX_SAFE_INTEGER }] };
+
 interface DiffLine {
   kind: ' ' | '-' | '+' | '\\';
   text: string;
@@ -135,17 +141,27 @@ function pick(hunk: Hunk, side: Side, ranges: LineRange[]): Set<number> {
   return picked;
 }
 
+/** Adds `ranges` on `side` to a selection. */
+export function addToSelection(selection: Selection, side: Side, ranges: LineRange[]): Selection {
+  return { ...selection, [side]: [...(selection[side] ?? []), ...ranges] };
+}
+
 /**
  * A patch that removes the picked changes from the commit's version of the file, or undefined when the ranges
  * pick no changes. Throws for files the commit deleted and for binary files.
  */
 export function removalPatch(diff: FileDiff, side: Side, ranges: LineRange[]): string | undefined {
+  return selectionPatch(diff, { [side]: ranges });
+}
+
+/** removalPatch for lines picked on both sides. */
+export function selectionPatch(diff: FileDiff, selection: Selection): string | undefined {
   if (diff.binary) throw new Error('Binary files can only be removed from a commit as a whole.');
   if (diff.deleted) throw new Error('The commit deletes this file. Use "Remove from Commit" on the file to bring it back.');
 
   const out: string[] = [];
   let delta = 0;
-  const picks = diff.hunks.map((hunk) => pick(hunk, side, ranges));
+  const picks = diff.hunks.map((hunk) => new Set([...pick(hunk, 'old', selection.old ?? []), ...pick(hunk, 'new', selection.new ?? [])]));
   // Taking every line out of a file the commit added removes the file.
   const removesFile =
     !!diff.newFileMode && diff.hunks.every((hunk, h) => hunk.lines.every((line, i) => line.kind !== '+' || picks[h].has(i)));

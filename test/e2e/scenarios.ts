@@ -784,6 +784,47 @@ scenario('patch: take selected lines out of a commit from its diff', async (t) =
   assert.deepEqual(t.subjects(3), ['Later', 'Insert N lines', 'Change lines']);
 });
 
+scenario('patch: build a custom patch across files, move it into another commit, apply it in reverse', async (t) => {
+  await t.cleanTree();
+  const write = (file: string, content: string) => fs.writeFileSync(path.join(t.repo, file), content);
+  write('lines.txt', 'a\nb\nc\nd\ne\nf\ng\nh\n');
+  t.sh('add', 'lines.txt');
+  t.sh('commit', '-q', '-m', 'Add lines');
+  write('lines.txt', 'a\nb\nC\nd\ne\nN1\nN2\nf\ng\nh\n');
+  write('extra.txt', 'extra\n');
+  t.sh('add', '.');
+  t.sh('commit', '-q', '-m', 'Change lines');
+  write('later.txt', 'later\n');
+  t.sh('add', 'later.txt');
+  t.sh('commit', '-q', '-m', 'Later');
+  await t.refresh();
+
+  // The two inserted lines, and all of extra.txt.
+  await t.run('codegit.openFileDiff', [await t.file(await t.commit('Change lines'), 'lines.txt')]);
+  const editor = await waitFor('the commit side of the diff', () => {
+    const active = vscode.window.activeTextEditor;
+    return active?.document.uri.scheme === 'git' && active.document.getText().includes('N1') ? active : undefined;
+  });
+  editor.selection = new vscode.Selection(5, 0, 6, 2);
+  await t.run('codegit.patch.add');
+  await t.run('codegit.file.addToPatch', [await t.file(await t.commit('Change lines'), 'extra.txt')]);
+
+  await t.run('codegit.commit.movePatchHere', [await t.commit('Later')]);
+  assert.deepEqual(t.subjects(3), ['Later', 'Change lines', 'Add lines']);
+  assert.equal(t.sh('show', 'HEAD~1:lines.txt'), 'a\nb\nC\nd\ne\nf\ng\nh');
+  assert.equal(t.sh('show', '--name-only', '--format=', 'HEAD~1'), 'lines.txt');
+  assert.equal(t.sh('show', '--name-only', '--format=', 'HEAD').split('\n').sort().join(' '), 'extra.txt later.txt lines.txt');
+  assert.equal(t.read('lines.txt'), 'a\nb\nC\nd\ne\nN1\nN2\nf\ng\nh\n', 'the end result is unchanged');
+
+  // Undo later.txt in the working tree only.
+  const head = t.rev('HEAD');
+  await t.run('codegit.file.addToPatch', [await t.file(await t.commit('Later'), 'later.txt')]);
+  await t.run('codegit.patch.menu', [], [pick('Apply in Reverse to Working Tree', /Custom patch from/)]);
+  assert.equal(t.rev('HEAD'), head);
+  assert.equal(fs.existsSync(path.join(t.repo, 'later.txt')), false);
+  await t.run('codegit.patch.reset');
+});
+
 scenario('file: open diff and open at revision', async (t) => {
   const file = await t.file(await t.commit('Add settings page'), 'settings.txt');
   await t.run('codegit.openFileDiff', [file]);

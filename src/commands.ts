@@ -4,12 +4,13 @@ import * as vscode from 'vscode';
 import { fromGraph } from './views/graphPanel';
 import type { GitOps } from './git/operations';
 import { commitUrl, toWebRepo, type WebRepo } from './git/hosting';
-import { removalPatch, type LineRange, type Side } from './git/patch';
+import { removalPatch, selectionPatch, type LineRange, type Side } from './git/patch';
 import { getCommitMessage, getOperation, getRemotes, type Operation } from './git/queries';
 import type { Git } from './git/runner';
 import type { RepoManager } from './repoManager';
 import type { Runner } from './runner';
 import type { CherryPickClipboard } from './views/cherryPickClipboard';
+import type { CustomPatch } from './views/customPatch';
 import type { CommitNode, FileNode, Node, StashNode } from './views/nodes';
 import type { CommitsProvider } from './views/providers';
 
@@ -19,12 +20,13 @@ export interface CommandDeps {
   commitsView: vscode.TreeView<Node>;
   stashView: vscode.TreeView<Node>;
   clipboard: CherryPickClipboard;
+  patch: CustomPatch;
   runner: Runner;
   refreshAll(force: boolean): Promise<void>;
 }
 
 export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
-  const { repos, commits, commitsView, stashView, clipboard, runner } = deps;
+  const { repos, commits, commitsView, stashView, clipboard, patch, runner } = deps;
   const { run, confirm } = runner;
 
   const patchContext = vscode.window.onDidChangeActiveTextEditor(updatePatchContext);
@@ -259,6 +261,24 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
 
     'codegit.file.removeFromCommit': (arg?: Node, all?: Node[]) => removeFiles(false, arg, all),
     'codegit.file.moveToIndex': (arg?: Node, all?: Node[]) => removeFiles(true, arg, all),
+    'codegit.patch.add': async () => {
+      const active = activeCommitDiff();
+      if (active) await addToPatch(active.diff.file, active.diff.side, active.ranges);
+    },
+    'codegit.file.addToPatch': async (arg?: Node, all?: Node[]) => {
+      const files = resolve<FileNode>('file', commitsView, arg, all).filter((f) => f.commit?.source === 'log');
+      if (files.some((f) => f.commit?.sha !== files[0].commit?.sha)) {
+        void vscode.window.showInformationMessage('Select files from a single commit.');
+        return;
+      }
+      for (const file of files) await addToPatch(file);
+    },
+    'codegit.patch.menu': () => patchMenu(),
+    'codegit.patch.reset': () => patch.clear(),
+    'codegit.commit.movePatchHere': async (arg?: Node, all?: Node[]) => {
+      const target = single(logTargets(arg, all));
+      if (target) await movePatch(target);
+    },
     'codegit.patch.remove': () => patchSelection('discard'),
     'codegit.patch.moveToIndex': () => patchSelection('index'),
     'codegit.patch.moveToNewCommit': () => patchSelection('newCommit'),
@@ -449,27 +469,37 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   }
 
   /**
-   * Line-level version of removeFiles: takes the changes selected in a commit's file diff out of the commit.
-   * An empty selection takes the change block under the cursor.
+   * The commit file diff in the active editor and the lines selected in it. An empty selection is the change block
+   * under the cursor.
    */
-  async function patchSelection(target: 'discard' | 'index' | 'newCommit'): Promise<void> {
+  function activeCommitDiff() {
     const editor = vscode.window.activeTextEditor;
     const diff = editor && commitDiffs.get(editor.document.uri.toString());
-    const commit = diff?.file.commit;
-    const ops = repos.ops();
-    if (!editor || !diff || !commit || !ops) {
+    if (!editor || !diff?.file.commit) {
       void vscode.window.showInformationMessage(
         'Open a file diff from the Commits view, select the changed lines to take out of the commit, and try again.',
       );
-      return;
+      return undefined;
     }
-    if (!(await canRewrite([commit]))) return;
     const ranges: LineRange[] = editor.selections.map((s) => {
       if (s.isEmpty) return { start: s.active.line + 1, end: s.active.line + 1, whole: true };
       // A selection that ends at the start of a line doesn't include that line.
       const end = s.end.character === 0 && s.end.line > s.start.line ? s.end.line : s.end.line + 1;
       return { start: s.start.line + 1, end };
     });
+    return { diff, commit: diff.file.commit, ranges };
+  }
+
+  /**
+   * Line-level version of removeFiles: takes the changes selected in a commit's file diff out of the commit.
+   * An empty selection takes the change block under the cursor.
+   */
+  async function patchSelection(target: 'discard' | 'index' | 'newCommit'): Promise<void> {
+    const active = activeCommitDiff();
+    const ops = repos.ops();
+    if (!active || !ops) return;
+    const { diff, commit, ranges } = active;
+    if (!(await canRewrite([commit]))) return;
     let patch: string | undefined;
     try {
       patch = removalPatch(await ops.commitFileDiff(commit.sha, diff.file.pair.change), diff.side, ranges);
@@ -503,6 +533,129 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     const where = newCommit !== undefined ? { newCommit } : (target as 'discard' | 'index');
     const title = { discard: 'Removing changes from commit…', index: 'Moving changes out of commit…', newCommit: 'Moving changes to a new commit…' }[target];
     await run(title, (ops) => ops.removePatchFromCommit(commit.sha, patch!, where));
+  }
+
+  // --- custom patch (lazygit's patch building) --------------------------------------------
+
+  async function addToPatch(file: FileNode, side?: Side, ranges?: LineRange[]): Promise<void> {
+    const current = patch.commit;
+    const commit = file.commit!;
+    if (current && current.sha !== commit.sha) {
+      const question = `The custom patch has changes from ${current.shortSha}. Discard them and start a new patch from ${commit.shortSha}?`;
+      if (!(await confirm(question, 'Start New Patch'))) return;
+    }
+    patch.add(file, side, ranges);
+  }
+
+  /** The custom patch as a removal patch for its commit, or undefined after saying why there is none. */
+  async function builtPatch(ops: GitOps, forRewrite: boolean): Promise<{ commit: CommitNode; removal: string } | undefined> {
+    const commit = patch.commit;
+    if (!commit || !patch.entries.length) {
+      void vscode.window.showInformationMessage(
+        'The custom patch is empty. Add changes with "Add Selected Changes to Custom Patch" in a commit\'s file diff, or "Add to Custom Patch" on a file of a commit.',
+      );
+      return undefined;
+    }
+    if (forRewrite) {
+      const onBranch = await ops.git.exec(['merge-base', '--is-ancestor', commit.sha, 'HEAD'], { allowedExitCodes: [1, 128] });
+      if (onBranch.exitCode !== 0) {
+        patch.clear();
+        void vscode.window.showWarningMessage(
+          `${commit.shortSha} is no longer on the current branch (it was rewritten, or another branch is checked out), so the custom patch was discarded.`,
+        );
+        return undefined;
+      }
+      if (!(await canRewrite([commit]))) return undefined;
+    }
+    try {
+      const parts = await Promise.all(
+        patch.entries.map(async (e) => selectionPatch(await ops.commitFileDiff(commit.sha, e.file.pair.change), e.selection)),
+      );
+      const removal = parts.filter(Boolean).join('');
+      if (removal) return { commit, removal };
+      void vscode.window.showInformationMessage(`The custom patch has no changes from ${commit.shortSha}.`);
+    } catch (error) {
+      void vscode.window.showWarningMessage(error instanceof Error ? error.message : String(error));
+    }
+    return undefined;
+  }
+
+  async function patchMenu(): Promise<void> {
+    const commit = patch.commit;
+    if (!commit) return void (await builtPatch(repos.ops()!, false));
+    const items: (vscode.QuickPickItem & { run: () => Promise<unknown> })[] = [
+      { label: '$(trash) Remove from Commit', description: `Discard the changes from ${commit.shortSha}`, run: () => rewritePatch('discard') },
+      { label: '$(arrow-down) Move out to Index', description: 'Take them out of the commit and stage them', run: () => rewritePatch('index') },
+      { label: '$(git-commit) Move to New Commit', description: `Split them into a new commit after ${commit.shortSha}`, run: () => rewritePatch('newCommit') },
+      { label: '$(arrow-swap) Move into Another Commit…', description: 'Older or newer', run: () => pickPatchTarget() },
+      { label: '$(check) Apply to Working Tree', description: 'History is unchanged', run: () => applyPatch(false) },
+      { label: '$(discard) Apply in Reverse to Working Tree', description: 'History is unchanged', run: () => applyPatch(true) },
+      { label: '$(eye) Show Patch', run: () => showPatch() },
+      { label: '$(close) Reset Patch', run: async () => patch.clear() },
+    ];
+    const files = patch.entries.map((e) => e.file.pair.change.path).join(', ');
+    const picked = await vscode.window.showQuickPick(items, { title: `Custom patch from ${commit.shortSha}: ${files}` });
+    await picked?.run();
+  }
+
+  async function rewritePatch(target: 'discard' | 'index' | 'newCommit'): Promise<void> {
+    const ops = repos.ops();
+    const built = ops && (await builtPatch(ops, true));
+    if (!built) return;
+    const { commit, removal } = built;
+    let where: 'discard' | 'index' | { newCommit: string } = target as 'discard' | 'index';
+    if (target === 'newCommit') {
+      const message = await vscode.window.showInputBox({
+        title: `New commit after ${commit.shortSha} with the custom patch`,
+        value: commit.subject,
+        validateInput: (v) => (v.trim() ? undefined : 'The message cannot be empty.'),
+      });
+      if (message === undefined) return;
+      where = { newCommit: message };
+    } else if (target === 'discard' && !(await confirm(`Discard the custom patch's changes from ${commit.shortSha}? Later commits touching those lines may conflict.`, 'Remove'))) {
+      return;
+    }
+    if (!(await confirmRewrite([commit]))) return;
+    const title = { discard: 'Removing patch from commit…', index: 'Moving patch out of commit…', newCommit: 'Moving patch to a new commit…' }[target];
+    if (await run(title, (ops) => ops.removePatchFromCommit(commit.sha, removal, where))) patch.clear();
+  }
+
+  async function pickPatchTarget(): Promise<void> {
+    const source = patch.commit;
+    const items = commits.commits
+      .filter((c) => c.source === 'log' && c.onHead !== false && c.sha !== source?.sha)
+      .map((c) => ({ label: `${c.shortSha}  ${c.subject}`, description: c.relDate, commit: c }));
+    const picked = await vscode.window.showQuickPick(items, { title: 'Move the custom patch into which commit?', matchOnDescription: true });
+    if (picked) await movePatch(picked.commit);
+  }
+
+  async function movePatch(target: CommitNode): Promise<void> {
+    const ops = repos.ops();
+    if (!ops || !(await canRewrite([target]))) return;
+    const built = await builtPatch(ops, true);
+    if (!built) return;
+    const { commit, removal } = built;
+    if (target.sha === commit.sha) {
+      void vscode.window.showInformationMessage('The custom patch is already from this commit. Pick a different commit to move it into.');
+      return;
+    }
+    if (!(await confirmRewrite([commit, target]))) return;
+    if (await run('Moving patch into commit…', (ops) => ops.movePatchToCommit(commit.sha, removal, target.sha))) patch.clear();
+  }
+
+  async function applyPatch(reverse: boolean): Promise<void> {
+    const ops = repos.ops();
+    const built = ops && (await builtPatch(ops, false));
+    if (!built) return;
+    await run(reverse ? 'Applying patch in reverse…' : 'Applying patch…', (ops) => ops.applyPatch(built.commit.sha, built.removal, reverse));
+  }
+
+  async function showPatch(): Promise<void> {
+    const ops = repos.ops();
+    const built = ops && (await builtPatch(ops, false));
+    if (!built) return;
+    const content = await ops.patchContent(built.commit.sha, built.removal);
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument({ language: 'diff', content }), { preview: true });
   }
 
   function setBase(sha: string | undefined): void {
