@@ -24,7 +24,7 @@ Re-run the command whenever you want to start over. It replaces the previous pla
 | "Add profile page" | Multi-line message | Reword in Editor; Copy… → message |
 | "Add settings page" | Touches 2 files | Remove one file from the commit; move it to the index |
 | "Rename logout to signout" | Rename | File list and diff of a rename |
-| `feature/login` | Pushed, ahead 1 | Push, force push, create pull request (opens a URL; the remote is local, so expect nothing useful) |
+| `feature/login` | Pushed, ahead 1 | Push, force push, create pull request (opens a URL; the remote is local, so expect nothing useful). Move Unpushed Commits to New Branch: the new branch gets "Login: error messages", `feature/login` matches `origin/feature/login` again |
 | `feature/login-ui` | Stacked on `feature/login` | Mark "Login: error messages" as base, then rebase onto `main` with the marked base, so only the 2 UI commits move. With `codegit.updateStackedBranches` set to `always`, reword a `feature/login` commit from here: `feature/login` moves too, and an interactive rebase lists "Update branch feature/login" |
 | `conflict/status-line` | Edits the same line as `main` | Merge into `main`, or rebase it onto `main`, to get a conflict; Continue / Abort from the status bar |
 | `feature/search` | Has a `fixup!` commit | Squash Fixup Commits Above on "Add search"; Create Fixup Commit |

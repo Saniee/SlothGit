@@ -349,6 +349,11 @@
         "icon": "$(add)"
       },
       {
+        "command": "codegit.branch.moveCommitsToNewBranch",
+        "title": "Move Unpushed Commits to New Branch…",
+        "category": "CodeGit"
+      },
+      {
         "command": "codegit.branch.delete",
         "title": "Delete…",
         "category": "CodeGit"
@@ -1076,6 +1081,11 @@
           "command": "codegit.branch.create",
           "when": "view == codegit.branches && viewItem =~ /^(branch:|tag$)/",
           "group": "1_checkout@2"
+        },
+        {
+          "command": "codegit.branch.moveCommitsToNewBranch",
+          "when": "view == codegit.branches && viewItem =~ /^branch:local.*:current.*:upstream/",
+          "group": "1_checkout@3"
         },
         {
           "command": "codegit.branch.merge",

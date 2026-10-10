@@ -243,6 +243,21 @@ describe('branches', { concurrency }, () => {
     assert.deepEqual((await getTags(r.git)).map((t) => t.name), ['v2']);
   });
 
+  test('move unpushed commits to a new branch, putting the current one back to its upstream', async () => {
+    const r = setup();
+    await assert.rejects(r.ops.moveCommitsToNewBranch('x'), /no upstream/);
+    withOrigin(r);
+    await assert.rejects(r.ops.moveCommitsToNewBranch('x'), /no commits that are not on its upstream/);
+    r.commit('b.txt', 'b\n', 'c2');
+    r.commit('c.txt', 'c\n', 'c3');
+    fs.writeFileSync(path.join(r.dir, 'a.txt'), 'dirty\n');
+    assert.equal(await r.ops.moveCommitsToNewBranch('feature/oops'), 2);
+    assert.equal(r.sh('branch', '--show-current'), 'feature/oops');
+    assert.deepEqual(r.subjects(), ['c3', 'c2', 'c1']);
+    assert.equal(r.sh('rev-parse', 'main'), r.sh('rev-parse', 'origin/main'));
+    assert.equal(fs.readFileSync(path.join(r.dir, 'a.txt'), 'utf8'), 'dirty\n', 'uncommitted changes come along');
+  });
+
   test('the repository signature changes with refs and HEAD, not with working tree edits', async () => {
     const r = setup();
     let last = await repoSignature(r.git);

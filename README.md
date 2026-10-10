@@ -21,6 +21,7 @@ lazygit's branches panel, as one tree with four sections:
   - delete (local, remote or both; unmerged branches ask before force-deleting), delete merged branches in bulk
   - merge into current (regular, `--no-ff` or squash), rebase current onto this
   - fast-forward from upstream (works without checking the branch out), push / force push with lease, set or unset upstream
+  - move unpushed commits to a new branch, for commits made on the wrong branch: the new branch gets them, and the current branch goes back to its upstream
   - create pull request (GitHub, GitLab, Bitbucket, Azure DevOps, Gitea), reset current branch to this, compare with current
 - **Remotes.** Each remote expands to its branches. Actions: fetch (one remote or all), add, rename, edit URL and remove. Remote branches can be checked out as a tracking branch, merged, rebased onto, set as the current branch's upstream, or deleted on the remote.
 - **Tags.** Create (lightweight or annotated, at HEAD or at any commit), push to a remote, delete locally or also on a remote, check out, and reset to.

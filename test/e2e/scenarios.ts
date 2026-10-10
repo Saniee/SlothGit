@@ -243,6 +243,15 @@ scenario('commit: rewriting a stacked branch moves the branch it is stacked on',
   assert.equal(t.rev('HEAD~2'), t.rev('feature/login'), 'feature/login-ui is still stacked on it');
 });
 
+scenario('branch: move unpushed commits to a new branch', async (t) => {
+  await t.checkout('feature/login');
+  await t.run('codegit.branch.moveCommitsToNewBranch', [], [input('feature/login-errors', /unpushed commits of feature\/login \(1 not pushed\)/)]);
+  assert.equal(t.branch(), 'feature/login-errors');
+  assert.equal(t.subjects(1)[0], 'Login: error messages');
+  assert.equal(t.rev('feature/login'), t.rev('origin/feature/login'));
+  assert.ok(t.saw('info', /Moved 1 commit to feature\/login-errors/));
+});
+
 scenario('branch: rebasing pushed commits warns', async (t) => {
   await t.checkout('feature/login');
   await t.run('codegit.branch.rebase', [await t.localBranch('main')], [pick('Simple Rebase'), button('Rebase', /already pushed/)]);

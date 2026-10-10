@@ -171,6 +171,21 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       if (name) await run('Creating branch…', (ops) => ops.createBranch(name, from?.rev ?? 'HEAD', true));
     },
 
+    'codegit.branch.moveCommitsToNewBranch': async () => {
+      const current = branches.localBranches.find((b) => b.current);
+      if (!current) {
+        void vscode.window.showInformationMessage('Check out the branch the commits were made on first.');
+        return;
+      }
+      const ahead = current.upstream ? ` (${current.ahead} not pushed)` : '';
+      const name = await runner.askBranchName(`New branch for the unpushed commits of ${current.name}${ahead}; ${current.name} goes back to its upstream`);
+      if (!name) return;
+      await run('Moving commits to a new branch…', async (ops) => {
+        const count = await ops.moveCommitsToNewBranch(name);
+        return `Moved ${count} commit${count === 1 ? '' : 's'} to ${name}, and reset ${current.name} to ${current.upstream?.name}.`;
+      });
+    },
+
     'codegit.branch.delete': async (arg?: Node) => {
       const node = refTarget(arg, 'local', 'remote');
       if (!node) return;

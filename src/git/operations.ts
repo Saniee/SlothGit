@@ -419,6 +419,26 @@ export class GitOps {
 
   // --- branches ---------------------------------------------------------------
 
+  /**
+   * For commits made on the wrong branch (lazygit's "move commits to new branch"): checks out a new branch `name`
+   * with the current branch's unpushed commits, and puts the current branch back to its upstream. Uncommitted
+   * changes come along. Returns the number of commits moved.
+   */
+  async moveCommitsToNewBranch(name: string): Promise<number> {
+    const branch = await this.git.exec(['symbolic-ref', '--short', '-q', 'HEAD'], { allowedExitCodes: [1] });
+    if (branch.exitCode !== 0) throw new UserError('HEAD is detached. Check out the branch the commits were made on.');
+    const current = branch.stdout.trim();
+    const upstream = await this.git.exec(['rev-parse', '--verify', '-q', '@{upstream}'], { allowedExitCodes: [1, 128] });
+    if (upstream.exitCode !== 0) {
+      throw new UserError(`${current} has no upstream, so there is nothing to put it back to. Create a branch here and reset ${current} instead.`);
+    }
+    const count = parseInt(await this.git.run(['rev-list', '--count', '@{upstream}..HEAD']), 10);
+    if (count === 0) throw new UserError(`${current} has no commits that are not on its upstream.`);
+    await this.git.exec(['switch', '-c', name]);
+    await this.git.exec(['branch', '-f', current, upstream.stdout.trim()]);
+    return count;
+  }
+
   async switchBranch(name: string): Promise<void> {
     await this.git.exec(['switch', name]);
   }
