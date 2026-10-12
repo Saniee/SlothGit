@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 ### Changed
 - The Commits view keeps the cursor on the commit you acted on, as lazygit does: after Move Up / Down it follows the commit, after a reword, squash, drop or author change it stays in place, and after a cherry-pick, revert or new fixup commit it goes to the top.
