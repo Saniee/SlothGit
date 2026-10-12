@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- The Commits view keeps the cursor on the commit you acted on, as lazygit does: after Move Up / Down it follows the commit, after a reword, squash, drop or author change it stays in place, and after a cherry-pick, revert or new fixup commit it goes to the top.
+- Shorter right-click menus. On a commit, the everyday rewrites stay at the top; Reword in Editor, Amend Author, fixup commits, Move Up / Down and Mark as Base move to **More Rewrite Actions**, and the bisect actions to a **Bisect** submenu. On a branch, Set / Unset Upstream move to an **Upstream** submenu. Copy Commit Message is gone from the menu (it is in **Copy…**). The Commit Graph's menu has the same layout.
+- The Commits title bar keeps Undo, Redo, Search, Commit Graph and Refresh as buttons; **Filter Commits by File…** and **Show All Branches** move to its **…** menu. While a filter or all-branches mode is on, the button to turn it off stays visible.
+- Rebase steps read like git's todo file, action first (`pick  Add search`), with a tooltip on what the action does. Right-click a step for **Pick**, **Reword…**, **Squash into Step Below**, **Fixup into Step Below**, **Edit (Stop Here)** or **Drop**, on several selected steps at once. Squash and fixup are hidden on the first step while nothing is applied, where there is nothing to meld into.
+- **Skip** is on the Commits title bar while a rebase, cherry-pick or revert is stopped.
+- Running Git actions show a spinner and their name in the status bar, and a notification if they take longer than a second and a half. When an action finishes without a message of its own, the status bar says so for a few seconds.
+
 ## 0.3.0
 
 ### Added

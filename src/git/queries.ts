@@ -528,6 +528,16 @@ export async function rebaseTodoPath(git: Git): Promise<string> {
   return git.gitDirPath('rebase-merge/git-rebase-todo');
 }
 
+/** How many commit steps a paused rebase has applied so far, from rebase-merge/done (`break` lines don't count). */
+export async function getRebaseApplied(git: Git): Promise<number> {
+  const file = await git.gitDirPath('rebase-merge/done');
+  if (!fs.existsSync(file)) return 0;
+  return fs
+    .readFileSync(file, 'utf8')
+    .split('\n')
+    .filter((l) => /^(pick|p|reword|r|edit|e|squash|s|fixup|f|drop|d)\s/.test(l.trim())).length;
+}
+
 /** Remaining steps of a paused interactive rebase, next one first. */
 export async function getRebaseTodo(git: Git): Promise<TodoEntry[]> {
   const file = await rebaseTodoPath(git);

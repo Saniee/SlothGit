@@ -33,9 +33,9 @@ Push, fetch and remote deletes go through VS Code's built-in Git extension, so i
 
 #### Rebasing onto another branch
 - **Whole branch:** right-click the target branch (e.g. `origin/main`) and pick **Rebase Current Branch onto This**.
-- **Only your commits** (your branch was cut from another feature branch): in the Commits view, right-click the last commit that is *not* yours and pick **Mark as Base Commit for Rebase**. Then run **Rebase Current Branch onto This** on the target and choose **Rebase from Marked Base**. This is `git rebase --onto <target> <base>`.
+- **Only your commits** (your branch was cut from another feature branch): in the Commits view, right-click the last commit that is *not* yours and pick **More Rewrite Actions → Mark as Base Commit for Rebase**. Then run **Rebase Current Branch onto This** on the target and choose **Rebase from Marked Base**. This is `git rebase --onto <target> <base>`.
 
-- **Interactive:** pick **Interactive Rebase** (or **Interactive Rebase from Marked Base**). The rebase pauses before the first commit is applied and lists the steps at the top of the Commits view. Reorder them, or change each to pick, reword, squash, fixup, edit or drop, then **Continue**. **Abort** leaves the branch as it was.
+- **Interactive:** pick **Interactive Rebase** (or **Interactive Rebase from Marked Base**). The rebase pauses before the first commit is applied and lists the steps at the top of the Commits view (see **Paused rebases** below). Reorder them, or change each to pick, reword, squash, fixup, edit or drop, then **Continue**. **Abort** leaves the branch as it was.
 
 CodeGit warns before rebasing commits that are already pushed. Conflicts are handled the same way as for other rewrites (see below).
 
@@ -46,7 +46,7 @@ Rewrite history straight from the commit list, with no todo file to edit by hand
 | --- | --- |
 | Squash / fixup into previous commit | Squash combines the messages; fixup keeps the older one |
 | Drop commit | Works on multiple selected commits |
-| Reword commit | Quick subject edit, or **Reword in Editor** for the full multi-line message |
+| Reword commit | Quick subject edit, or **More Rewrite Actions → Reword Commit in Editor** for the full multi-line message |
 | Edit commit (pause rebase) | Stage changes, then **Continue** amends it |
 | Amend staged changes into commit | Folds staged changes into any older commit; unstaged changes are preserved |
 | Create fixup commit / squash fixup commits above | `git commit --fixup` and `--autosquash` (lazygit `F` / `S`) |
@@ -77,21 +77,33 @@ With no selection, the change under the cursor is used. As with VS Code's **Stag
 
 **Stacked branches:** with `codegit.updateStackedBranches` set to `always` (or git's `rebase.updateRefs` turned on, which the default setting follows), rewriting history also moves other local branches that point at the rewritten commits, like lazygit. That keeps a branch stacked on another one stacked after you change the lower one. A paused rebase lists these branch updates with the other steps, and moving a commit across one moves the commit into that branch. Branches checked out in another worktree are left alone, and undo only moves the current branch back.
 
+After a rewrite the cursor stays on the commit you acted on (it follows a moved commit), so you can repeat an action without looking for the commit again.
+
 Commit icons are coloured as in lazygit: green when the commit is already on the main branch, yellow when it is pushed to the upstream branch, and red when it isn't pushed yet. The main branches are set with `codegit.mainBranches` (default `main` and `master`); a main branch counts by its upstream when it has one, so on `main` itself pushed commits are green. CodeGit asks for confirmation before rewriting pushed commits, including commits already on the main branch.
 
-All rewrites use `git rebase --interactive --autostash`, so a dirty working tree is fine. When a rebase stops (on conflicts, or at a commit you chose to edit), the status bar and the view toolbar offer **Continue / Skip / Abort**. The remaining rebase steps appear at the top of the Commits view, where you can reorder them or change their action (pick, reword, squash, fixup, edit, drop) before continuing. Reword asks for the new message right away and applies it when the rebase gets to that commit.
+All rewrites use `git rebase --interactive --autostash`, so a dirty working tree is fine. When a rebase stops (on conflicts, or at a commit you chose to edit), the status bar and the view toolbar offer **Continue / Skip / Abort**. **Paused rebases:** the steps still to apply are listed in orange at the top of the Commits view, newest at the top, so they run from the bottom up. Each reads like a line of git's todo file, action first (`pick  Add search`).
+
+| To | Do |
+| --- | --- |
+| Change what happens to a commit | Right-click the step: **Pick**, **Reword…**, **Squash into Step Below**, **Fixup into Step Below**, **Edit (Stop Here)** or **Drop**. Select several steps to change them together |
+| Reorder | The ↑ / ↓ buttons on the step |
+| Go on | **Continue** (▷) on the view's title bar |
+| Leave out the commit that conflicted | **Skip** on the title bar |
+| Undo the whole rebase | **Abort** (■) |
+
+Squash and fixup meld a commit into the step below it, the older commit. Reword asks for the new message right away and applies it when the rebase gets to that commit.
 
 Each commit shows its SHA, author initials and message, as in lazygit, followed by its relative date, branches and tags. Co-authors (`Co-authored-by` trailers) are added to the initials, e.g. `AL+GH`, and listed in the tooltip and the Commit Graph. In a narrow view only the end of the message is cut off; the tooltip has the full message, author, co-authors, date and email. Merge commits get a merge icon.
 
 **Search:** the search button matches text in the message or author name (case-insensitive), or a SHA prefix. Squash and move are disabled while searching, since the neighbouring commits are hidden.
 
-**All branches:** the branch button lists every branch, remote branch and tag together. Other branches' commits are dimmed; you can check them out, branch from them or cherry-pick them, but not rewrite them.
+**All branches:** **Show All Branches** in the view's **…** menu lists every branch, remote branch and tag together. Other branches' commits are dimmed; you can check them out, branch from them or cherry-pick them, but not rewrite them.
 
 **Commit Graph ("pretty mode"):** the graph button opens the history as a graph in an editor tab: branch lanes, branch and tag labels, author and date columns, search and an all-branches switch. Click a commit for its message and files (click a file for its diff), double-click to open all its changes, and right-click for the same actions as the Commits view.
 
-**Filter by file:** the filter button on the Commits view, or **Show File History in CodeGit** in the Explorer or an editor tab's context menu, limits the log to commits touching that file or folder.
+**Filter by file:** **Filter Commits by File…** in the Commits view's **…** menu, or **Show File History in CodeGit** in the Explorer or an editor tab's context menu, limits the log to commits touching that file or folder.
 
-**Bisect:** right-click commits to mark them bad, good or skipped. CodeGit starts the bisect if needed, marks the commits in the list, and offers to reset once git names the first bad commit.
+**Bisect:** right-click commits and use the **Bisect** submenu to mark them bad, good or skipped. CodeGit starts the bisect if needed, marks the commits in the list, and offers to reset once git names the first bad commit.
 
 **Compare:** **Select for Compare** on any commit, branch or tag, then **Compare with Selected** on another. This is lazygit's diffing mode, shown in the multi-diff editor.
 

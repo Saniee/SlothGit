@@ -51,6 +51,11 @@ export abstract class BaseProvider<TRoot extends Node> implements vscode.TreeDat
     return pending.done;
   }
 
+  /** Needed for TreeView.reveal. Only root items are revealed, so children report no parent. */
+  getParent(): Node | undefined {
+    return undefined;
+  }
+
   /** Re-render existing items without reloading data. */
   redraw(): void {
     this.emitter.fire();

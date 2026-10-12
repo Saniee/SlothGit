@@ -42,17 +42,19 @@ export function createRunner(
     }
     busy = true;
     let failure: { error: unknown } | undefined;
+    let info: string | void = undefined;
     try {
-      const info = await vscode.window.withProgress({ location: vscode.ProgressLocation.SourceControl, title }, () =>
-        fn(ops, repo),
-      );
-      if (info) void vscode.window.showInformationMessage(info);
+      info = await withFeedback(title, () => fn(ops, repo));
     } catch (error) {
       failure = { error };
     } finally {
       busy = false;
       await repo.status().catch(() => undefined);
       await refreshAll(true);
+    }
+    if (!failure) {
+      if (info) void vscode.window.showInformationMessage(info);
+      else vscode.window.setStatusBarMessage(`$(check) ${doneMessage(title)}`, DONE_MESSAGE_MS);
     }
     // Reported only now that this operation no longer counts as running: the conflict prompt's
     // Continue/Abort buttons start a new one.
@@ -113,6 +115,31 @@ export function createRunner(
   }
 
   return { run, confirm, resetTo, askBranchName };
+}
+
+/** How long an operation runs before it also gets a notification, so slow pushes or rebases don't look stuck. */
+const NOTIFY_AFTER_MS = 1500;
+const DONE_MESSAGE_MS = 4000;
+
+/**
+ * Shows the running operation in the Source Control progress bar and as a spinner in the status bar,
+ * plus a notification once it has taken longer than NOTIFY_AFTER_MS.
+ */
+function withFeedback<T>(title: string, fn: () => Promise<T>): Promise<T> {
+  const task = Promise.resolve(vscode.window.withProgress({ location: vscode.ProgressLocation.SourceControl, title }, () =>
+    vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: `CodeGit: ${title}` }, fn),
+  ));
+  const timer = setTimeout(() => {
+    void vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `CodeGit: ${title}` }, () =>
+      task.catch(() => undefined),
+    );
+  }, NOTIFY_AFTER_MS);
+  return task.finally(() => clearTimeout(timer));
+}
+
+/** "Pushing main…" → "Pushing main: done". */
+export function doneMessage(title: string): string {
+  return `CodeGit: ${title.replace(/…$/, '')}: done`;
 }
 
 /** Errors from the built-in Git extension carry git's output in `stderr`, with a generic `message`. */

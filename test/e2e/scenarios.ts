@@ -225,6 +225,23 @@ scenario('branch: interactive rebase pauses first so steps can be changed', asyn
   assert.equal(t.rev('HEAD~3'), t.rev('main'));
 });
 
+scenario('branch: interactive rebase: steps read action first; one-click actions on several steps', async (t) => {
+  await t.checkout('feature/search');
+  await t.run('codegit.branch.rebase', [await t.localBranch('main')], [pick('Interactive Rebase')]);
+  const todos = await t.todos();
+  const items = await Promise.all(todos.map((n) => t.treeItem('commits', n)));
+  assert.equal(items[0].contextValue, 'todo:pick');
+  assert.equal(items[3].contextValue, 'todo:pick:first', 'the next step to apply has nothing to squash into');
+  assert.match(String((items[0].label as vscode.TreeItemLabel).label), /^pick {2}Add sorting/);
+  await t.run('codegit.todo.drop', [todos[0], [todos[0], todos[1]]]);
+  assert.deepEqual((await t.todos()).map((n) => n.action), ['drop', 'drop', 'pick', 'pick']);
+  await t.run('codegit.todo.squash', [(await t.todos())[2]]);
+  await t.run('codegit.operation.continue');
+  assert.ok(!t.operationInProgress());
+  assert.deepEqual(t.subjects(1), ['Add search']);
+  assert.equal(t.rev('HEAD~1'), t.rev('main'));
+});
+
 scenario('branch: interactive rebase from a marked base', async (t) => {
   await t.checkout('feature/login-ui');
   await t.run('codegit.commit.markBase', [await t.commit('Login: error messages')]);
@@ -683,6 +700,23 @@ scenario('commit: move up and down', async (t) => {
   assert.deepEqual(t.subjects(3), ['Add profile page', 'Fix typo in docs', 'Add settings page']);
   await t.run('codegit.commit.moveUp', [await t.commit('Add profile page')]);
   assert.ok(t.saw('warning', /already the newest/));
+  assert.equal(t.status(), BASELINE);
+});
+
+scenario('commits: the cursor follows a commit as it is moved and reworded', async (t) => {
+  await vscode.commands.executeCommand('codegit.commits.focus');
+  // "Add settings page" touches no file the two newer commits do, so it can move past both.
+  await t.run('codegit.commit.moveUp', [await t.commit('Add settings page')]);
+  assert.deepEqual(await t.selectedSubjects(['Add settings page']), ['Add settings page']);
+  // Moving it again from the selection, as a repeated menu action would.
+  await t.run('codegit.commit.moveUp', [t.selection[0]]);
+  assert.deepEqual(t.subjects(3), ['Add settings page', 'Add profile page', 'Fix typo in docs']);
+  assert.deepEqual(await t.selectedSubjects(['Add settings page']), ['Add settings page']);
+  await t.run('codegit.commit.reword', [t.selection[0]], [input('Add the settings page', /Reword/)]);
+  assert.deepEqual(await t.selectedSubjects(['Add the settings page']), ['Add the settings page']);
+  await t.run('codegit.commit.moveDown', [t.selection[0]]);
+  assert.deepEqual(t.subjects(3), ['Add profile page', 'Add the settings page', 'Fix typo in docs']);
+  assert.deepEqual(await t.selectedSubjects(['Add the settings page']), ['Add the settings page']);
   assert.equal(t.status(), BASELINE);
 });
 

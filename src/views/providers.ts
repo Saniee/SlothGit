@@ -4,6 +4,7 @@ import {
   getCommitFiles,
   getLog,
   getOperation,
+  getRebaseApplied,
   getRebaseTodo,
   getReflog,
   getStashes,
@@ -13,6 +14,7 @@ import {
   notOnHead,
   reachableFrom,
   type BisectState,
+  type Operation,
 } from '../git/queries';
 import type { TodoEntry } from '../git/todo';
 import type { Git } from '../git/runner';
@@ -63,6 +65,17 @@ const TODO_ICONS: Record<TodoEntry['action'], string> = {
   'update-ref': 'git-branch',
 };
 
+const TODO_MEANINGS: Record<TodoEntry['action'], string> = {
+  pick: 'Keep the commit as it is.',
+  reword: 'Keep the commit with a new message.',
+  edit: 'Stop after applying it, so you can change its files.',
+  squash: 'Meld it into the step below, combining both messages.',
+  fixup: "Meld it into the step below, keeping that step's message.",
+  drop: 'Leave the commit out.',
+  merge: 'Recreates a merge commit; it cannot be changed here.',
+  'update-ref': 'Moves a stacked branch.',
+};
+
 export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
   private unpushed: Set<string> | null = null;
   /** Commits already on a main branch (codegit.mainBranches), and which one. */
@@ -80,6 +93,10 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
   /** Set while `git bisect` is running. */
   bisect: BisectState | undefined;
   private todoCount = 0;
+  /** In-progress rebase, merge, cherry-pick or revert. */
+  private operation: Operation | undefined;
+  /** Commit steps a stopped rebase has applied; squash and fixup need one to meld into. */
+  private rebaseApplied = 0;
 
   constructor(
     repos: RepoManager,
@@ -87,6 +104,11 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
     private readonly clipboard: CherryPickClipboard,
   ) {
     super(repos, output);
+  }
+
+  /** A rebase, merge, cherry-pick or revert is stopped. */
+  get operationInProgress(): boolean {
+    return !!this.operation;
   }
 
   get commits(): readonly CommitNode[] {
@@ -120,6 +142,8 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
     this.head = head.stdout.trim() || undefined;
     this.mainRef = mainRefs[0]?.replace(/^refs\/(heads|remotes)\//, '');
     this.todoCount = todo.length;
+    this.operation = operation;
+    this.rebaseApplied = operation === 'rebase' ? await getRebaseApplied(git).catch(() => 0) : 0;
 
     // The todo list runs oldest first; show it newest first, above the commits.
     const todoNodes = todo.map((t): TodoNode => ({ kind: 'todo', ...t })).reverse();
@@ -135,7 +159,7 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
 
   protected keyOf(roots: (CommitNode | TodoNode)[]): string {
     const unpushed = `${this.unpushed ? [...this.unpushed].join(',') : 'none'} ${[...this.merged].join(',')}`;
-    const state = JSON.stringify([this.head, this.bisect, this.filterPath, this.search, this.allBranches]);
+    const state = JSON.stringify([this.head, this.bisect, this.filterPath, this.search, this.allBranches, this.operation, this.rebaseApplied]);
     const items = roots.map((n) => (n.kind === 'todo' ? `${n.action} ${n.sha} ${n.ref ?? ''}` : `${n.sha} ${n.refs?.join(',')}`));
     return `${unpushed}\n${state}\n${items.join('\n')}`;
   }
@@ -218,6 +242,12 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
     return undefined;
   }
 
+  /** The next commit step to apply. It is shown last among the steps, since the list is newest first. */
+  private nextTodo(): TodoNode | undefined {
+    const todos = this.roots.filter((n): n is TodoNode => n.kind === 'todo' && n.action !== 'update-ref');
+    return todos[todos.length - 1];
+  }
+
   private todoItem(node: TodoNode): vscode.TreeItem {
     const item = new vscode.TreeItem(node.subject, vscode.TreeItemCollapsibleState.None);
     if (node.action === 'update-ref') {
@@ -230,12 +260,22 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
     }
     // A merge step without -C has no SHA; leave its id to VS Code.
     if (node.sha) item.id = `todo:${node.sha}`;
-    item.description = `${node.action} · ${node.sha}`;
-    item.tooltip = `Pending rebase step: ${node.action} ${node.sha}\n${node.subject}`;
+    // As in lazygit, the action comes first, so the plan reads like the todo file.
+    item.label = { label: `${node.action}  ${node.subject}`, highlights: [[0, node.action.length]] };
+    item.description = node.sha;
+    const tooltip = new vscode.MarkdownString();
+    tooltip.appendMarkdown(`**${escape(node.subject)}**\n\n\`${node.sha}\`\n\n`);
+    tooltip.appendMarkdown(`Pending rebase step: **${node.action}**. ${TODO_MEANINGS[node.action]}`);
+    if (node.action !== 'merge') tooltip.appendMarkdown('\n\nRight-click to change it. Steps run from the bottom up.');
+    item.tooltip = tooltip;
     const color = node.action === 'drop' ? 'disabledForeground' : 'charts.orange';
     item.iconPath = new vscode.ThemeIcon(TODO_ICONS[node.action], new vscode.ThemeColor(color));
-    // Merge steps recreate a merge commit and can't be changed or moved.
-    item.contextValue = node.action === 'merge' ? 'todo:merge' : 'todo';
+    // Merge steps recreate a merge commit and can't be changed or moved. The action and position let the
+    // menu hide what doesn't apply: the current action, and squash/fixup on the first step when nothing has
+    // been applied yet (there is no commit of this branch to meld it into).
+    const first = this.operation === 'rebase' && this.rebaseApplied === 0 && node === this.nextTodo();
+    if (node.action === 'merge') item.contextValue = 'todo:merge';
+    else item.contextValue = ['todo', node.action, first && 'first'].filter(Boolean).join(':');
     return item;
   }
 

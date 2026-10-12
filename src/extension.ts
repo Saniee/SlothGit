@@ -23,6 +23,7 @@ const OPERATION_LABELS: Record<Operation, string> = {
 /** Returned from activate() for the smoke test; not a stable API. */
 export interface CodeGitTestApi {
   providers: Record<string, vscode.TreeDataProvider<Node>>;
+  views: Record<string, vscode.TreeView<Node>>;
   refreshAll(force: boolean): Promise<void>;
 }
 
@@ -119,7 +120,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodeGi
   hideGraphOnce(context, [commitsView, branchesView, stashView, reflogView]);
 
   void refreshAll(true);
-  return { providers: { commits, branches, stashes, reflog }, refreshAll };
+  return {
+    providers: { commits, branches, stashes, reflog },
+    views: { commits: commitsView, branches: branchesView, stashes: stashView, reflog: reflogView },
+    refreshAll,
+  };
 }
 
 const GRAPH_HIDDEN_KEY = 'graphViewHidden';

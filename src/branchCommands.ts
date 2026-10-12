@@ -282,7 +282,7 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
         await ops.rebaseOnto(node.rev, useBase ? base : undefined, interactive);
         if (interactive) {
           void vscode.commands.executeCommand('codegit.commits.focus');
-          return 'Rebase paused before the first commit. Change or reorder the steps at the top of the Commits view, then Continue.';
+          return 'Rebase paused before the first commit. Right-click the steps at the top of the Commits view to change them, then Continue.';
         }
       });
       if (ok && useBase) await vscode.commands.executeCommand('codegit.commit.clearBase');

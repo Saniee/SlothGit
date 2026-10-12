@@ -33,6 +33,10 @@ export function newRepo(key: string, build: (dir: string) => void = () => {}): s
       ['commit.gpgsign', 'false'],
       ['tag.gpgsign', 'false'],
       ['core.autocrlf', 'false'],
+      // No background gc or maintenance after commits: it repacks objects while the template is being
+      // copied (seen on CI as ENOENT on .git/objects).
+      ['gc.auto', '0'],
+      ['maintenance.auto', 'false'],
     ]) {
       git(template, 'config', name, value);
     }

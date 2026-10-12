@@ -305,6 +305,23 @@ export class Context {
     return ((await this.api.providers[provider].getChildren(node)) ?? []) as Node[];
   }
 
+  /** Subjects of the commits selected in the Commits view, once the selection settles (reveal is async). */
+  async selectedSubjects(expected: string[]): Promise<string[]> {
+    const read = () =>
+      this.api.views.commits.selection.filter((n): n is CommitNode => n.kind === 'commit').map((n) => n.subject);
+    for (let i = 0; i < 20 && JSON.stringify(read()) !== JSON.stringify(expected); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return read();
+  }
+  get selection(): readonly Node[] {
+    return this.api.views.commits.selection;
+  }
+
+  treeItem(provider: string, node: Node): Thenable<vscode.TreeItem> | vscode.TreeItem {
+    return this.api.providers[provider].getTreeItem(node);
+  }
+
   async commits(): Promise<CommitNode[]> {
     return (await this.roots('commits')).filter((n): n is CommitNode => n.kind === 'commit');
   }

@@ -100,11 +100,45 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     return true;
   }
 
+  /**
+   * Where the commit a rewrite produced ends up, relative to the commit it was run on: rewriting changes
+   * SHAs, so the view would otherwise lose the selection. lazygit keeps its cursor on the commit the same way.
+   */
+  type Landing = 'same' | 'up' | 'down' | 'top' | 'none';
+
+  /** Selects the commit at `from`'s position (moved by `landing`) once the view has reloaded. */
+  async function keepSelection(from: CommitNode[], landing: Landing): Promise<void> {
+    if (landing === 'none' || !commitsView.visible) return;
+    const list = commits.commits;
+    let index = 0;
+    if (landing !== 'top') {
+      // The newest of the targets; a squash or drop of several leaves the result where the newest was.
+      const positions = from.map((n) => n.index ?? -1).filter((i) => i >= 0);
+      if (!positions.length) return;
+      index = Math.min(...positions) + (landing === 'up' ? -1 : landing === 'down' ? 1 : 0);
+    }
+    const node = list[Math.max(0, Math.min(index, list.length - 1))];
+    if (node) await commitsView.reveal(node, { select: true, focus: false }).then(undefined, () => undefined);
+  }
+
+  /** run() for a commit command, then keeps the cursor on the resulting commit. */
+  async function runOn(nodes: CommitNode[], landing: Landing, title: string, fn: (ops: GitOps) => Promise<string | void>) {
+    const ok = await run(title, fn);
+    // A stopped rebase lists its steps and HEAD isn't the branch tip, so positions don't carry over.
+    if (ok && !commits.operationInProgress) await keepSelection(nodes, landing);
+    return ok;
+  }
+
   /** Common shape for commands that rewrite history in the Commits view. */
   function rewrite(
     title: string,
     fn: (ops: GitOps, nodes: CommitNode[]) => Promise<string | void>,
-    options: { single?: boolean; fullHistory?: boolean; confirm?: (nodes: CommitNode[]) => string | undefined } = {},
+    options: {
+      single?: boolean;
+      fullHistory?: boolean;
+      confirm?: (nodes: CommitNode[]) => string | undefined;
+      landing?: Landing;
+    } = {},
   ) {
     return async (arg?: Node, all?: Node[]) => {
       let nodes = logTargets(arg, all);
@@ -116,7 +150,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       const question = options.confirm?.(nodes);
       if (question && !(await confirm(question, 'Continue'))) return;
       if (!(await confirmRewrite(nodes))) return;
-      await run(title, (ops) => fn(ops, nodes));
+      await runOn(nodes, options.landing ?? 'same', title, (ops) => fn(ops, nodes));
     };
   }
 
@@ -141,19 +175,22 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     'codegit.commit.moveUp': rewrite('Moving commit…', (ops, [node]) => ops.move(node.sha, 'up'), {
       single: true,
       fullHistory: true,
+      landing: 'up',
     }),
     'codegit.commit.moveDown': rewrite('Moving commit…', (ops, [node]) => ops.move(node.sha, 'down'), {
       single: true,
       fullHistory: true,
+      landing: 'down',
     }),
     'codegit.commit.autosquash': rewrite('Squashing fixup commits…', (ops, [node]) => ops.autosquash(node.sha), {
       single: true,
       fullHistory: true,
+      landing: 'none',
     }),
     'codegit.commit.createFixup': async (arg?: Node, all?: Node[]) => {
       const node = single(logTargets(arg, all));
       if (node && (await canRewrite([node]))) {
-        await run('Creating fixup commit…', async (ops) => {
+        await runOn([node], 'top', 'Creating fixup commit…', async (ops) => {
           await ops.createFixupCommit(node.sha);
           return `Created "fixup! ${node.subject}". Use "Squash Fixup Commits Above" to fold it in.`;
         });
@@ -189,7 +226,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         const names = chosen.map((p) => p.name).join(', ');
         if (!(await confirm(`Remove ${names} as co-author of ${node.shortSha}?`, 'Remove'))) return;
         if (!(await confirmRewrite([node]))) return;
-        await run('Removing co-author…', (ops) => ops.removeCoAuthors(node.sha, chosen));
+        await runOn([node], 'same', 'Removing co-author…', (ops) => ops.removeCoAuthors(node.sha, chosen));
         return;
       }
       let value = '';
@@ -204,7 +241,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         value = input.trim();
       }
       if (!(await confirmRewrite([node]))) return;
-      await run('Amending author…', (ops) =>
+      await runOn([node], 'same', 'Amending author…', (ops) =>
         picked.id === 'reset'
           ? ops.resetAuthor(node.sha)
           : picked.id === 'set'
@@ -236,7 +273,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       });
       if (newSubject === undefined || newSubject === subject) return;
       if (!(await confirmRewrite([node]))) return;
-      await run('Rewording…', (ops) => ops.reword(node.sha, [newSubject, ...body].join('\n')));
+      await runOn([node], 'same', 'Rewording…', (ops) => ops.reword(node.sha, [newSubject, ...body].join('\n')));
     },
 
     'codegit.commit.rewordInEditor': async (arg?: Node, all?: Node[]) => {
@@ -248,7 +285,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       const edited = await editInEditor(file, original, `Reword ${node.shortSha}`);
       if (edited === undefined || edited === original) return;
       if (!(await confirmRewrite([node]))) return;
-      await run('Rewording…', (ops) => ops.reword(node.sha, edited));
+      await runOn([node], 'same', 'Rewording…', (ops) => ops.reword(node.sha, edited));
     },
 
     'codegit.commit.copy': async (arg?: Node, all?: Node[]) => {
@@ -336,7 +373,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         return;
       }
       if (!(await confirm(`Cherry-pick ${plural([...items], 'commit')} onto the current HEAD?`, 'Cherry-Pick'))) return;
-      await run('Cherry-picking…', async (ops) => {
+      await runOn([], 'top', 'Cherry-picking…', async (ops) => {
         await ops.cherryPick(items.map((n) => n.sha));
         clipboard.clear();
       });
@@ -377,11 +414,11 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
           return;
         }
         const mainline = await pickMainline(merge);
-        if (mainline) await run('Reverting…', (ops) => ops.revert([merge.sha], mainline));
+        if (mainline) await runOn([], 'top', 'Reverting…', (ops) => ops.revert([merge.sha], mainline));
         return;
       }
       if (!(await confirm(`Revert ${plural(nodes, 'commit')}? This creates new commits that undo them.`, 'Revert'))) return;
-      await run('Reverting…', (ops) => ops.revert(shas(nodes)));
+      await runOn([], 'top', 'Reverting…', (ops) => ops.revert(shas(nodes)));
     },
     'codegit.commit.copySha': async (arg?: Node, all?: Node[]) => {
       const nodes = commitTargets(arg, all);

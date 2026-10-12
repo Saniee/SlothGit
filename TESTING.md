@@ -56,6 +56,7 @@ Tick off what you tried and note anything odd, such as wrong labels, missing ref
 
 ### Commits view
 - [ ] Squash, fixup, drop (multi-select), reword, reword in editor, move up / down
+- [ ] The cursor stays on the commit after each of those (move up / down follows it)
 - [ ] Edit (pause), then change files, stage, Continue
 - [ ] Amend staged changes into an older commit
 - [ ] Create fixup commit, squash fixup commits above
@@ -71,7 +72,7 @@ Tick off what you tried and note anything odd, such as wrong labels, missing ref
 - [ ] All branches: other branches' commits are dimmed and can't be rewritten
 - [ ] Commit Graph: lanes for `feature/with-merge` and all branches, labels, search, details pane, file diffs, double-click, right-click actions
 - [ ] Commit Graph next to GitLens's graph: what's missing or worse?
-- [ ] During a paused rebase: todo list at the top; change actions (including reword) / reorder; Continue / Skip / Abort
+- [ ] During a paused rebase: steps read `pick  subject`; right-click actions on one and several steps (including reword); reorder; Continue / Skip / Abort on the title bar
 - [ ] Bisect: bad / good / skip, marks shown, status bar, reset
 - [ ] Compare: select, compare with selected (commits, branches, tags mixed)
 - [ ] Undo / redo across: commit, amend, reset, rebase, checkout, merge
@@ -81,6 +82,8 @@ Tick off what you tried and note anything odd, such as wrong labels, missing ref
 - [ ] Reflog: checkout, reset, branch, cherry-pick copy from an entry
 
 ### General
+- [ ] Right-click menus on a commit, a branch and in the Commit Graph: More Rewrite Actions, Bisect and Upstream submenus hold the moved items; nothing appears where it can't run
+- [ ] A slow action (push to a slow remote, a long rebase) shows a status-bar spinner and, after ~1.5 s, a notification; quick actions flash "…: done" in the status bar
 - [ ] Fetch / Pull / Push buttons on the Source Control "Changes" title bar (setting `codegit.showSyncButtons`)
 - [ ] Rewriting pushed commits asks first (setting `codegit.confirmRewritingPushedCommits`)
 - [ ] Views refresh after you commit or switch branches outside CodeGit

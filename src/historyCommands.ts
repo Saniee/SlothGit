@@ -105,10 +105,32 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
 
   async function editTodo(arg: Node | undefined, change: (node: TodoNode) => Parameters<typeof transformTodo>[1] | undefined) {
     const node = arg?.kind === 'todo' ? arg : (commitsView.selection.find((n) => n.kind === 'todo') as TodoNode | undefined);
+    const plan = node && change(node);
+    if (plan) await writeTodo(plan);
+  }
+
+  /** The rebase steps a command applies to: the selection when the clicked step is part of it. */
+  function todoTargets(arg?: Node, all?: Node[]): TodoNode[] {
+    const selected = (all?.length ? all : commitsView.selection).filter((n): n is TodoNode => n.kind === 'todo');
+    const nodes = arg?.kind === 'todo' && !selected.includes(arg) ? [arg] : selected;
+    return nodes.filter((n) => n.action !== 'merge' && n.action !== 'update-ref');
+  }
+
+  /** lazygit's p / s / f / d / e on rebase steps, for one or several selected steps. */
+  async function setTodoAction(action: TodoAction, arg?: Node, all?: Node[]): Promise<void> {
+    const nodes = todoTargets(arg, all);
+    if (!nodes.length) return;
+    if (action === 'reword') {
+      if (nodes.length > 1) void vscode.window.showInformationMessage('Reword one rebase step at a time.');
+      else await rewordTodo(nodes[0]);
+      return;
+    }
+    await writeTodo({ actions: Object.fromEntries(nodes.map((n) => [n.sha, action])) });
+  }
+
+  async function writeTodo(plan: Parameters<typeof transformTodo>[1]): Promise<void> {
     const git = repos.git();
-    if (!node || !git) return;
-    const plan = change(node);
-    if (!plan) return;
+    if (!git) return;
     try {
       const file = await rebaseTodoPath(git);
       fs.writeFileSync(file, transformTodo(fs.readFileSync(file, 'utf8'), plan));
@@ -219,16 +241,22 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
 
     'codegit.todo.moveUp': (arg?: Node) => editTodo(arg, (node) => ({ move: { sha: node.sha, direction: 'up' } })),
     'codegit.todo.moveDown': (arg?: Node) => editTodo(arg, (node) => ({ move: { sha: node.sha, direction: 'down' } })),
+    'codegit.todo.pick': (arg?: Node, all?: Node[]) => setTodoAction('pick', arg, all),
+    'codegit.todo.reword': (arg?: Node, all?: Node[]) => setTodoAction('reword', arg, all),
+    'codegit.todo.squash': (arg?: Node, all?: Node[]) => setTodoAction('squash', arg, all),
+    'codegit.todo.fixup': (arg?: Node, all?: Node[]) => setTodoAction('fixup', arg, all),
+    'codegit.todo.edit': (arg?: Node, all?: Node[]) => setTodoAction('edit', arg, all),
+    'codegit.todo.drop': (arg?: Node, all?: Node[]) => setTodoAction('drop', arg, all),
     'codegit.todo.setAction': async (arg?: Node) => {
       const node = arg?.kind === 'todo' ? arg : (commitsView.selection.find((n) => n.kind === 'todo') as TodoNode | undefined);
       if (!node) return;
       const actions: { label: TodoAction; description: string }[] = [
         { label: 'pick', description: 'Keep the commit' },
         { label: 'reword', description: 'Keep the commit, with a new message' },
-        { label: 'squash', description: 'Meld into the previous commit, combining messages' },
-        { label: 'fixup', description: "Meld into the previous commit, keeping the previous commit's message" },
-        { label: 'edit', description: 'Stop after applying it' },
-        { label: 'drop', description: 'Remove the commit' },
+        { label: 'squash', description: 'Meld into the step below, combining both messages' },
+        { label: 'fixup', description: "Meld into the step below, keeping that step's message" },
+        { label: 'edit', description: 'Stop after applying it, to change its files' },
+        { label: 'drop', description: 'Leave the commit out' },
       ];
       const picked = await vscode.window.showQuickPick(
         actions.filter((a) => a.label !== node.action),
