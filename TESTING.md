@@ -46,7 +46,8 @@ Ticked items are tested and working in 1.0.0. If you find something odd, such as
 - [x] Checkout, checkout previous, new branch, rename, delete (local / remote / both; unmerged asks to force)
 - [x] Merge: regular, `--no-ff`, squash
 - [x] Rebase onto, plain and with a marked base; onto a branch already contained says there is nothing to rebase
-- [x] Interactive rebase onto, plain and with a marked base: pauses first, change / reorder steps, Continue or Abort
+- [x] Interactive rebase onto, plain and with a marked base: opens the rebase editor; **Plan in Commits View** pauses first instead, change / reorder steps, Continue or Abort
+- [x] Rebase editor (Interactive Rebase from Here… on a commit, or from the branch rebase picker): drag or Alt+↑ / Alt+↓ to reorder, pick / reword (message box) / edit / squash / fixup / drop; conflicts are marked before starting; Start Rebase runs the plan, and a conflict stops it with Continue / Abort; a merge among the commits is refused
 - [x] Fast-forward, set / unset upstream, set remote branch as upstream
 - [x] Push, force push with lease, fetch, fetch all
 - [x] Compare with current, reset current to this, copy name

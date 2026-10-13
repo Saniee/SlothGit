@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import * as vscode from 'vscode';
 
-export type Page = 'graph' | 'sync';
+export type Page = 'graph' | 'sync' | 'rebase';
 
 /** Where the bundled pages are: esbuild.mjs builds src/webview/<page>/main.ts into dist/webview/<page>.js and .css. */
 export function webviewRoot(extensionUri: vscode.Uri): vscode.Uri {

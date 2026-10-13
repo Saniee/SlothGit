@@ -11,6 +11,13 @@
 
 export type TodoAction = 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
 
+/** One commit of a rebase planned in the rebase editor. */
+export interface PlannedStep {
+  /** Full SHA. */
+  sha: string;
+  action: TodoAction;
+}
+
 export interface RebasePlan {
   /** Full SHA -> new action. */
   actions?: Record<string, TodoAction>;
@@ -20,6 +27,23 @@ export interface RebasePlan {
   fixupInto?: { sha: string; target: string };
   /** Stop before the first step (a `break` line), so the steps can be changed before anything is applied. */
   pauseFirst?: boolean;
+  /**
+   * The whole plan from the rebase editor, oldest first: replaces the commit lines in order. Only for histories
+   * without merges; other lines (update-ref) keep their place in the list.
+   */
+  steps?: PlannedStep[];
+  /** Full SHA -> new message, for the reword steps of `steps`. rebaseEditor.ts saves them as for a paused rebase. */
+  messages?: Record<string, string>;
+}
+
+/** Why a plan from the rebase editor (oldest first) can't run as it is, or undefined when it can. */
+export function planProblem(steps: PlannedStep[]): string | undefined {
+  const kept = steps.filter((s) => s.action !== 'drop');
+  if (!kept.length) return 'Every commit is dropped. Keep at least one, or reset the branch instead.';
+  const first = kept[0].action;
+  if (first === 'squash' || first === 'fixup') {
+    return `The oldest commit you keep can't be ${first === 'squash' ? 'squashed' : 'fixed up'}: there is no earlier commit in the list to combine it with.`;
+  }
 }
 
 const COMMIT_LINE = /^(pick|p|reword|r|edit|e|squash|s|fixup|f|drop|d)(\s+)([0-9a-fA-F]{4,64})\b(.*)$/;
@@ -87,6 +111,7 @@ export function pendingRewordMessage(done: string, messages: Record<string, stri
 export function transformTodo(todo: string, plan: RebasePlan): string {
   const eol = todo.includes('\r\n') ? '\r\n' : '\n';
   const lines = todo.split(/\r?\n/);
+  if (plan.steps) return applySteps(lines, plan.steps).join(eol);
   const parsed = new Map<number, CommitLine>();
   const merges: string[] = [];
   lines.forEach((line, i) => {
@@ -173,4 +198,29 @@ export function transformTodo(todo: string, plan: RebasePlan): string {
   }
 
   return lines.join(eol);
+}
+
+/** Rewrites the commit lines of `lines` to follow `steps`, in order. */
+function applySteps(lines: string[], steps: PlannedStep[]): string[] {
+  if (lines.some((line) => STRUCTURE_LINE.test(line))) throw new Error("the commits include merges, which the rebase editor can't reorder");
+  const problem = planProblem(steps);
+  if (problem) throw new Error(problem);
+  const slots = lines.flatMap((line, i) => (COMMIT_LINE.test(line) ? [i] : []));
+  const written = new Map(
+    slots.map((i) => {
+      const m = COMMIT_LINE.exec(lines[i])!;
+      return [m[3].toLowerCase(), m[4]] as const;
+    }),
+  );
+  // Git leaves out commits whose changes are already in the new base; their steps are skipped.
+  const present = steps.flatMap((step) => {
+    const sha = [...written.keys()].find((short) => step.sha.toLowerCase().startsWith(short));
+    return sha === undefined ? [] : [{ sha, action: step.action }];
+  });
+  if (present.length !== slots.length) throw new Error('the branch changed since the rebase was planned');
+  const result = [...lines];
+  slots.forEach((slot, k) => {
+    result[slot] = `${present[k].action} ${present[k].sha}${written.get(present[k].sha)}`;
+  });
+  return result;
 }

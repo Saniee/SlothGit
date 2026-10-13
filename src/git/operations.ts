@@ -17,11 +17,11 @@ import {
   type Person,
 } from './queries';
 import { Git } from './runner';
-import { REWORD_MESSAGES_FILE, transformTodo, type RebasePlan, type TodoAction } from './todo';
+import { REWORD_MESSAGES_FILE, transformTodo, type PlannedStep, type RebasePlan, type TodoAction } from './todo';
 import { parseFileDiff, type FileDiff } from './patch';
 import { planUndo, REDO_MARKER, UNDO_MARKER, type UndoAction, type UndoPlan } from './undo';
 
-const ROOT = '--root';
+export const ROOT = '--root';
 
 /**
  * Builds the shell command git runs as its (sequence) editor. Git executes editors through `sh`
@@ -512,6 +512,14 @@ export class GitOps {
     }
     const args = base ? ['--onto', target, base] : [target];
     await this.git.exec(['rebase', '--autostash', ...this.updateRefsFlags(), ...args], { env: { GIT_EDITOR: ':' } });
+  }
+
+  /**
+   * Runs a rebase planned in the rebase editor: the commits after `upstream` (ROOT for all), replayed onto `onto`
+   * (default: where they are) in the order and with the actions of `steps`, oldest first.
+   */
+  async rebaseSteps(upstream: string, steps: PlannedStep[], messages: Record<string, string>, onto?: string): Promise<void> {
+    await this.rebase(upstream, { steps, messages }, onto ? { onto } : {});
   }
 
   /**

@@ -18,7 +18,7 @@ const common = {
 };
 
 // The webview pages run in a browser inside VS Code; each one's CSS is written next to its script.
-const pages = ['graph', 'sync'].map((page) => ({
+const pages = ['graph', 'sync', 'rebase'].map((page) => ({
   ...common,
   platform: 'browser',
   format: 'iife',

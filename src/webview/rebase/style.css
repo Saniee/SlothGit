@@ -1,0 +1,67 @@
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; padding: 0; }
+body {
+  display: flex; flex-direction: column; overflow: hidden;
+  color: var(--vscode-foreground); background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family); font-size: var(--vscode-font-size);
+}
+header { padding: 10px 16px 6px; border-bottom: 1px solid var(--vscode-panel-border, transparent); }
+h1 { margin: 0 0 4px; font-size: 1.15em; font-weight: 600; }
+.hint { margin: 0; color: var(--vscode-descriptionForeground); }
+
+.steps { flex: 1; overflow-y: auto; margin: 0; padding: 6px 8px; list-style: none; }
+.step {
+  display: grid; grid-template-columns: 18px 92px 64px minmax(120px, 1fr) auto auto; gap: 8px; align-items: center;
+  padding: 4px 6px; border: 1px solid transparent; border-radius: 3px;
+}
+.step:hover { background: var(--vscode-list-hoverBackground); }
+.step:focus { outline: none; border-color: var(--vscode-focusBorder); }
+.step.dragging { opacity: 0.4; }
+.step.drop-before { box-shadow: inset 0 2px 0 var(--vscode-focusBorder); }
+.step.drop-after { box-shadow: inset 0 -2px 0 var(--vscode-focusBorder); }
+.handle { cursor: grab; color: var(--vscode-descriptionForeground); text-align: center; user-select: none; }
+.sha { font-family: var(--vscode-editor-font-family); color: var(--vscode-descriptionForeground); }
+.subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta { color: var(--vscode-descriptionForeground); white-space: nowrap; }
+.pushed { margin-left: 6px; padding: 0 4px; border-radius: 3px; font-size: 0.9em; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
+.step.drop .subject, .step.drop .sha { text-decoration: line-through; opacity: 0.6; }
+/* Squash and fixup steps hang off the commit below them. */
+.step.combine { margin-left: 24px; }
+.step.combine .subject::before { content: '↳ '; color: var(--vscode-descriptionForeground); }
+.note { grid-column: 3 / -1; color: var(--vscode-descriptionForeground); }
+.conflict { grid-column: 3 / -1; color: var(--vscode-editorWarning-foreground); }
+textarea {
+  grid-column: 3 / -1; min-height: 4.5em; resize: vertical; padding: 4px 6px; font: inherit;
+  color: var(--vscode-input-foreground); background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent); border-radius: 2px;
+}
+textarea:focus, select:focus { outline: 1px solid var(--vscode-focusBorder); }
+select {
+  padding: 2px 4px; font: inherit; border-radius: 2px;
+  color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border, transparent);
+}
+.moves { display: flex; gap: 2px; }
+.moves button {
+  padding: 0 5px; border: none; border-radius: 3px; cursor: pointer; background: none; color: var(--vscode-icon-foreground);
+}
+.moves button:hover:not(:disabled) { background: var(--vscode-toolbar-hoverBackground); }
+
+footer {
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between;
+  padding: 8px 16px; border-top: 1px solid var(--vscode-panel-border, transparent);
+}
+.status { flex: 1 1 280px; color: var(--vscode-descriptionForeground); }
+.status.warn { color: var(--vscode-editorWarning-foreground); }
+.status.error { color: var(--vscode-errorForeground); }
+.buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.buttons button {
+  padding: 4px 12px; border: 1px solid var(--vscode-button-border, transparent); border-radius: 2px; cursor: pointer; font: inherit;
+  color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground);
+}
+.buttons button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground); }
+.buttons button.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.buttons button.primary:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
+button:disabled { opacity: 0.5; cursor: default; }
+button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.hidden { display: none; }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseTodo, transformTodo } from '../src/git/todo';
+import { parseTodo, planProblem, transformTodo } from '../src/git/todo';
 
 const A = 'aaaaaaa1111111111111111111111111111111111';
 const B = 'bbbbbbb2222222222222222222222222222222222';
@@ -113,4 +113,42 @@ test('stacked branches: update-ref steps are listed, and moving a commit across 
     'pick aaaaaaa first\nupdate-ref refs/heads/x\n\npick ccccccc third\npick bbbbbbb second\n',
     'within a branch, commits swap as usual',
   );
+});
+
+// --- the rebase editor's plan ----------------------------------------------------------------------
+
+test('steps rewrite the whole list in order, keeping other lines in place', () => {
+  const withRef = ['pick aaaaaaa first', 'pick bbbbbbb second', 'update-ref refs/heads/stacked', 'pick ccccccc third', ''].join('\n');
+  const out = transformTodo(withRef, {
+    steps: [
+      { sha: C, action: 'pick' },
+      { sha: A, action: 'reword' },
+      { sha: B, action: 'fixup' },
+    ],
+  });
+  assert.deepEqual(out.split('\n').slice(0, 4), ['pick ccccccc third', 'reword aaaaaaa first', 'update-ref refs/heads/stacked', 'fixup bbbbbbb second']);
+});
+
+test('steps for commits git left out (already in the new base) are skipped', () => {
+  const out = transformTodo('pick aaaaaaa first\npick ccccccc third\n', {
+    steps: [
+      { sha: A, action: 'pick' },
+      { sha: B, action: 'drop' },
+      { sha: C, action: 'squash' },
+    ],
+  });
+  assert.deepEqual(out.split('\n').slice(0, 2), ['pick aaaaaaa first', 'squash ccccccc third']);
+});
+
+test('steps refuse a list with merges, a stale plan, and plans git cannot run', () => {
+  const steps = [{ sha: A, action: 'pick' as const }];
+  assert.throws(() => transformTodo('label onto\npick aaaaaaa first\n', { steps }), /merges/);
+  assert.throws(() => transformTodo(todo, { steps }), /changed/);
+  assert.throws(() => transformTodo(todo, { steps: [{ sha: A, action: 'squash' }] }), /no earlier commit/);
+});
+
+test('planProblem', () => {
+  assert.equal(planProblem([{ sha: A, action: 'pick' }, { sha: B, action: 'squash' }]), undefined);
+  assert.match(planProblem([{ sha: A, action: 'drop' }, { sha: B, action: 'fixup' }])!, /can't be fixed up/);
+  assert.match(planProblem([{ sha: A, action: 'drop' }])!, /Every commit is dropped/);
 });

@@ -4,6 +4,8 @@ If empty check roadmap.
 
 - **Check the Sync view's right-click menus by hand.** Right-clicking Pull or Push should show the same entries as their ⌄ quick picks. The entries come from package.json `webview/context`, and `test/contributions.test.ts` keeps them in step with `src/webview/syncMenus.ts`, but no automated test opens the native menu.
 - **License wording.** package.json says `GPL-3.0-only`. If "or any later version" was meant, change it to `GPL-3.0-or-later` (and add the usual notice to the README).
+- Fix Marketplace "Your extension has suspicious content. Please fix your extension metadata, or contact support if you need assistance."
+- Trim unneeded comments.
 
 ## Maintenance
 
@@ -18,4 +20,5 @@ From the 1.0.0 tech-debt review and code review, not done yet:
 
 ## Features
 
-- **Visual interactive rebase editor** (GitLens-style): drag to reorder, mark squash / reword / drop, warn about conflicts before running, and one panel for every conflicted file. Build it as a page in `src/webview/` like the Commit Graph and the Sync view.
+- **Rebase editor, part 3: a conflicts panel.** The editor (`src/views/rebasePanel.ts`, `src/webview/rebase/`) plans the rebase and predicts conflicts. Still to do: when a rebase stops on a conflict, one panel listing every conflicted file with both sides, keep ours / keep theirs / open in the merge editor, then Continue, Skip or Abort.
+- **Rebase editor: drag by hand once in VS Code.** Dropping rows was tested with synthetic drag events in a browser, and the e2e tests set the plan through a test message; no automated test drags with a real mouse.

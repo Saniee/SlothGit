@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { fromGraph } from './views/graphPanel';
-import type { GitOps } from './git/operations';
+import { ROOT, type GitOps } from './git/operations';
 import { commitUrl, toWebRepo, type WebRepo } from './git/hosting';
 import { removalPatch, selectionPatch, type LineRange, type Side } from './git/patch';
 import { getCommitMessage, getOperation, getRemotes, type Operation } from './git/queries';
@@ -13,6 +13,7 @@ import type { CherryPickClipboard } from './views/cherryPickClipboard';
 import type { CustomPatch } from './views/customPatch';
 import type { CommitNode, FileNode, Node, StashNode } from './views/nodes';
 import type { CommitsProvider } from './views/providers';
+import type { RebaseTarget } from './views/rebasePanel';
 
 export interface CommandDeps {
   repos: RepoManager;
@@ -23,6 +24,7 @@ export interface CommandDeps {
   patch: CustomPatch;
   runner: Runner;
   refreshAll(force: boolean): Promise<void>;
+  openRebaseEditor(target: RebaseTarget): Promise<void>;
 }
 
 export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
@@ -257,7 +259,13 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       },
       { single: true },
     ),
-    'slothgit.commit.amendStaged': rewrite('Amending commit…', (ops, [node]) => ops.amendStaged(node.sha), { single: true }),
+    /** Plans a rebase of this commit and every newer one in the rebase editor (which asks about pushed commits). */
+    'slothgit.commit.rebaseEditor': async (arg?: Node, all?: Node[]) => {
+      const node = single(logTargets(arg, all));
+      if (!node || !(await canRewrite([node]))) return;
+      await deps.openRebaseEditor({ upstream: node.parents[0] ?? ROOT, label: `from ${node.shortSha} ${node.subject}` });
+    },
+    'slothgit.commit.amendStaged':rewrite('Amending commit…', (ops, [node]) => ops.amendStaged(node.sha), { single: true }),
 
     'slothgit.commit.reword': async (arg?: Node, all?: Node[]) => {
       const node = single(logTargets(arg, all));

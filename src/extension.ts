@@ -10,6 +10,7 @@ import { BranchesProvider } from './views/branches';
 import { CherryPickClipboard } from './views/cherryPickClipboard';
 import { CustomPatch } from './views/customPatch';
 import { GraphPanel } from './views/graphPanel';
+import { RebasePanel, type RebaseTarget } from './views/rebasePanel';
 import { SyncViewProvider } from './views/syncView';
 import { initLearn, learn, type LearnTopic } from './learn';
 import type { Node } from './views/nodes';
@@ -29,6 +30,8 @@ export interface SlothGitTestApi {
   sync: SyncViewProvider;
   /** Rows the open Commit Graph page last drew. */
   graphRenderedRows(): number | undefined;
+  /** The open rebase editor. */
+  rebaseEditor(): RebasePanel | undefined;
   refreshAll(force: boolean): Promise<void>;
   /** Runs the CodeGit settings migration again, as on a first start. */
   migrateSettings(): Promise<void>;
@@ -103,6 +106,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<SlothG
   }
 
   const runner = createRunner(repos, output, refreshAll);
+  const openRebaseEditor = (target: RebaseTarget) => RebasePanel.open(context, repos, runner, target);
 
   context.subscriptions.push(
     repos,
@@ -126,8 +130,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<SlothG
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('slothgit')) void refreshAll(true);
     }),
-    ...registerCommands({ repos, commits, commitsView, stashView, clipboard, patch, runner, refreshAll }),
-    ...registerBranchCommands({ repos, branches, branchesView, commits, runner }),
+    ...registerCommands({ repos, commits, commitsView, stashView, clipboard, patch, runner, refreshAll, openRebaseEditor }),
+    ...registerBranchCommands({ repos, branches, branchesView, commits, runner, openRebaseEditor }),
     ...registerHistoryCommands({ repos, commits, commitsView, runner, refreshAll }),
     vscode.commands.registerCommand('slothgit.graph.open', () => GraphPanel.show(context, repos)),
     vscode.commands.registerCommand('slothgit.simpleMode.on', () => setSimpleMode(true)),
@@ -143,6 +147,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<SlothG
     views: { commits: commitsView, branches: branchesView, stashes: stashView, reflog: reflogView },
     sync,
     graphRenderedRows: () => GraphPanel.renderedRows(),
+    rebaseEditor: () => RebasePanel.active(),
     refreshAll,
     migrateSettings: async () => {
       await context.globalState.update(SETTINGS_MIGRATED_KEY, undefined);

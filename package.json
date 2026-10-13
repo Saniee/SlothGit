@@ -189,6 +189,11 @@
         "category": "SlothGit"
       },
       {
+        "command": "slothgit.commit.rebaseEditor",
+        "title": "Interactive Rebase from Here…",
+        "category": "SlothGit"
+      },
+      {
         "command": "slothgit.commit.amendStaged",
         "title": "Add Staged Changes to This Commit",
         "category": "SlothGit"
@@ -1068,6 +1073,11 @@
           "group": "1_rebase@5"
         },
         {
+          "command": "slothgit.commit.rebaseEditor",
+          "when": "view == slothgit.commits && viewItem =~ /^commit(?!.*:other)/",
+          "group": "1_rebase@6"
+        },
+        {
           "command": "slothgit.commit.amendStaged",
           "when": "view == slothgit.commits && viewItem =~ /^commit(?!.*:other)/ && !config.slothgit.simpleMode",
           "group": "1_rebase@6"
@@ -1537,6 +1547,10 @@
           "when": "false"
         },
         {
+          "command": "slothgit.commit.rebaseEditor",
+          "when": "false"
+        },
+        {
           "command": "slothgit.commit.amendStaged",
           "when": "false"
         },
@@ -1950,6 +1964,11 @@
           "command": "slothgit.commit.edit",
           "when": "webviewId == 'slothgit.graph' && webviewSection == 'commit' && slothgitOnHead && !config.slothgit.simpleMode",
           "group": "1_rewrite@5"
+        },
+        {
+          "command": "slothgit.commit.rebaseEditor",
+          "when": "webviewId == 'slothgit.graph' && webviewSection == 'commit' && slothgitOnHead",
+          "group": "1_rewrite@6"
         },
         {
           "command": "slothgit.commit.copyForCherryPick",

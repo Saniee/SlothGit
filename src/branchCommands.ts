@@ -11,6 +11,7 @@ import { ForcePushMode } from './types/git';
 import type { BranchesProvider } from './views/branches';
 import type { FileNode, Node, RefNode, RemoteNode, WorktreeNode } from './views/nodes';
 import type { CommitsProvider } from './views/providers';
+import type { RebaseTarget } from './views/rebasePanel';
 import { learn, learnItem } from './learn';
 
 export interface BranchCommandDeps {
@@ -19,6 +20,7 @@ export interface BranchCommandDeps {
   branchesView: vscode.TreeView<Node>;
   commits: CommitsProvider;
   runner: Runner;
+  openRebaseEditor(target: RebaseTarget): Promise<void>;
 }
 
 type LocalRef = Extract<RefNode, { type: 'local' }>;
@@ -330,7 +332,7 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
         },
         {
           label: 'Interactive Rebase',
-          description: 'pause first to plan it',
+          description: 'plan it in the rebase editor first',
           detail: `Lists ${mine} first, so you can reorder, squash, reword or drop them before they're replayed.`,
           useBase: false,
           interactive: true,
@@ -356,7 +358,17 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       if (!picked) return;
       if ('learn' in picked) return learn(picked.learn);
       const { useBase, interactive } = picked;
-      if (!useBase && !interactive && (await alreadyContains(node.rev))) {
+      if (interactive) {
+        // The rebase editor asks about pushed commits itself, when the rebase starts.
+        await deps.openRebaseEditor({
+          upstream: useBase ? base! : node.rev,
+          onto: useBase ? node.rev : undefined,
+          label: `onto ${node.name}`,
+          afterStart: () => useBase && vscode.commands.executeCommand('slothgit.commit.clearBase'),
+        });
+        return;
+      }
+      if (!useBase && (await alreadyContains(node.rev))) {
         // git would "rebase" by fast-forwarding through the same commits and change nothing.
         void vscode.window.showInformationMessage(
           `${current} already contains ${node.name}, so there is nothing to rebase. ` +
@@ -365,13 +377,7 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
         return;
       }
       if (!(await confirmPushedRewrite(useBase ? base! : node.rev))) return;
-      const ok = await run(`Rebasing onto ${node.name}…`, async (ops) => {
-        await ops.rebaseOnto(node.rev, useBase ? base : undefined, interactive);
-        if (interactive) {
-          void vscode.commands.executeCommand('slothgit.commits.focus');
-          return 'Rebase paused before the first commit. Right-click the steps at the top of the Commits view to change them, then Continue.';
-        }
-      });
+      const ok = await run(`Rebasing onto ${node.name}…`, (ops) => ops.rebaseOnto(node.rev, useBase ? base : undefined));
       if (ok && useBase) await vscode.commands.executeCommand('slothgit.commit.clearBase');
     },
 

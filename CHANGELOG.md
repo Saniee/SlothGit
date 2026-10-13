@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Rebase editor:** **Interactive Rebase from Here…** on a commit (Commits view and Commit Graph) opens the commits from there to the newest in an editor tab. Drag them (or press Alt+↑ / Alt+↓) to reorder, choose pick, reword (with a message box), edit, squash, fixup or drop for each, and see which steps are likely to conflict, and in which files, before anything runs. **Start Rebase** runs the whole plan at once.
+
+### Changed
+- **Interactive Rebase** in the branch rebase menu opens the rebase editor. Its **Plan in Commits View** button starts the rebase paused before the first commit, as before.
+
 ## 1.0.0
 
 ### Added

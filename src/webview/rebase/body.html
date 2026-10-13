@@ -1,0 +1,19 @@
+<header>
+  <h1 id="title"></h1>
+  <p class="hint">
+    Newest at the top, like the Commits view. Drag a commit (or press Alt+↑ / Alt+↓) to reorder it, and pick what
+    happens to it. Squash and Fixup combine a commit into the one below it.
+  </p>
+</header>
+<ol id="steps" class="steps"></ol>
+<footer>
+  <div id="status" class="status" role="status"></div>
+  <div class="buttons">
+    <button id="start" class="primary">Start Rebase</button>
+    <button id="reset">Reset</button>
+    <button id="pause" title="Start the rebase paused before the first commit, and change the steps in the Commits view instead">
+      Plan in Commits View
+    </button>
+    <button id="cancel">Cancel</button>
+  </div>
+</footer>

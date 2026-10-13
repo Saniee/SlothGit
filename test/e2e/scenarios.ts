@@ -221,9 +221,91 @@ scenario('branch: rebasing onto a branch already contained says there is nothing
   assert.ok(!t.operationInProgress());
 });
 
+/** The rebase editor once its page has drawn `rows` (newest first) and finished checking for conflicts. */
+async function rebaseEditor(t: Context, rows: string[]) {
+  const editor = await waitFor('the rebase editor', () => t.api.rebaseEditor());
+  await waitFor(`the rebase editor to show ${rows.join(' | ')}`, () => {
+    const drawn = editor.rendered;
+    return drawn && drawn.rows.join(' | ') === rows.join(' | ') && !/Checking/.test(drawn.status);
+  });
+  return editor;
+}
+
+scenario('rebase editor: from a commit, reorder, reword and run it in one go', async (t) => {
+  await t.run('slothgit.commit.rebaseEditor', [await t.commit('Add settings page')]);
+  const editor = await rebaseEditor(t, ['pick Add profile page', 'pick Fix typo in docs', 'pick Add settings page']);
+  assert.equal(editor.rendered!.status, 'No conflicts expected.');
+  const [settings, typo, profile] = ['Add settings page', 'Fix typo in docs', 'Add profile page'].map((s) => t.rev(`HEAD^{/^${s}}`));
+
+  // Profile before the typo fix: both change README.md.
+  editor.apply([
+    { sha: profile, action: 'pick' },
+    { sha: typo, action: 'pick' },
+    { sha: settings, action: 'drop' },
+  ]);
+  await rebaseEditor(t, ['drop Add settings page', 'pick Fix typo in docs ⚠', 'pick Add profile page ⚠']);
+  assert.match(editor.rendered!.status, /2 commits are likely to conflict/);
+  assert.deepEqual((await editor.check([{ sha: profile, action: 'pick' }]))?.conflicts, { [profile]: ['README.md'] });
+
+  await editor.start(
+    [
+      { sha: typo, action: 'pick' },
+      { sha: profile, action: 'pick' },
+      { sha: settings, action: 'reword' },
+    ],
+    { [settings]: 'Add settings screen' },
+  );
+  t.check('start');
+  assert.deepEqual(t.subjects(4), ['Add settings screen', 'Add profile page', 'Fix typo in docs', 'Bump version']);
+  assert.equal(t.status(), BASELINE);
+  assert.equal(t.api.rebaseEditor(), undefined, 'the editor closes');
+});
+
+scenario('rebase editor: a plan with a conflict stops there, and can be aborted', async (t) => {
+  const before = t.rev('HEAD');
+  await t.run('slothgit.commit.rebaseEditor', [await t.commit('Fix typo in docs')]);
+  const editor = await rebaseEditor(t, ['pick Add profile page', 'pick Fix typo in docs']);
+  const [typo, profile] = [t.rev('HEAD~1'), t.rev('HEAD')];
+  prompts.queue.push(button('Abort', /Rebase stopped/));
+  await editor.start([{ sha: profile, action: 'pick' }, { sha: typo, action: 'pick' }], {});
+  t.check('start');
+  assert.ok(!t.operationInProgress());
+  assert.equal(t.rev('HEAD'), before);
+  assert.equal(t.status(), BASELINE);
+});
+
+scenario('rebase editor: from the branch rebase picker, onto another branch', async (t) => {
+  await t.checkout('feature/search');
+  await t.run('slothgit.branch.rebase', [await t.localBranch('main')], [pick('Interactive Rebase')]);
+  const editor = await rebaseEditor(t, ['pick Add sorting', 'pick fixup! Add search', 'pick Add filters', 'pick Add search']);
+  const [search, filters, fixup, sorting] = [3, 2, 1, 0].map((n) => t.rev(`HEAD~${n}`));
+  // Nothing changed in the list, but the commits still move onto main.
+  await editor.start(
+    [
+      { sha: search, action: 'pick' },
+      { sha: fixup, action: 'fixup' },
+      { sha: filters, action: 'pick' },
+      { sha: sorting, action: 'drop' },
+    ],
+    {},
+  );
+  t.check('start');
+  assert.deepEqual(t.subjects(2), ['Add filters', 'Add search']);
+  assert.equal(t.read('search.txt'), 'search box\nfixed typo\n');
+  assert.equal(t.rev('HEAD~2'), t.rev('main'));
+});
+
+scenario('rebase editor: a merge in the commits is refused', async (t) => {
+  await t.checkout('feature/with-merge');
+  await t.run('slothgit.commit.rebaseEditor', [await t.commit('Side work')]);
+  assert.ok(t.saw('warning', /include a merge commit/));
+  assert.equal(t.api.rebaseEditor(), undefined);
+});
+
 scenario('branch: interactive rebase pauses first so steps can be changed', async (t) => {
   await t.checkout('feature/search');
   await t.run('slothgit.branch.rebase', [await t.localBranch('main')], [pick('Interactive Rebase')]);
+  await (await rebaseEditor(t, ['pick Add sorting', 'pick fixup! Add search', 'pick Add filters', 'pick Add search'])).pause();
   assert.ok(t.operationInProgress(), 'the rebase is paused');
   assert.equal(t.rev('HEAD'), t.rev('main'), 'nothing is applied yet');
   const todos = await t.todos();
@@ -238,6 +320,7 @@ scenario('branch: interactive rebase pauses first so steps can be changed', asyn
 scenario('branch: interactive rebase: steps read action first; one-click actions on several steps', async (t) => {
   await t.checkout('feature/search');
   await t.run('slothgit.branch.rebase', [await t.localBranch('main')], [pick('Interactive Rebase')]);
+  await (await rebaseEditor(t, ['pick Add sorting', 'pick fixup! Add search', 'pick Add filters', 'pick Add search'])).pause();
   const todos = await t.todos();
   const items = await Promise.all(todos.map((n) => t.treeItem('commits', n)));
   assert.equal(items[0].contextValue, 'todo:pick');
@@ -256,6 +339,7 @@ scenario('branch: interactive rebase from a marked base', async (t) => {
   await t.checkout('feature/login-ui');
   await t.run('slothgit.commit.markBase', [await t.commit('Login: error messages')]);
   await t.run('slothgit.branch.rebase', [await t.localBranch('main')], [pick('Interactive Rebase from Marked Base')]);
+  await (await rebaseEditor(t, ['pick Login UI: colors', 'pick Login UI: layout'])).pause();
   assert.deepEqual((await t.todos()).map((n) => n.subject), ['Login UI: colors', 'Login UI: layout']);
   await t.run('slothgit.operation.continue');
   assert.deepEqual(t.subjects(2), ['Login UI: colors', 'Login UI: layout']);

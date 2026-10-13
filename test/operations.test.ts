@@ -7,7 +7,8 @@ import { buildEditorCommand, GitOps } from '../src/git/operations';
 import { getOperation, getRebaseTodo, getStashes, getStashFiles } from '../src/git/queries';
 import { Git } from '../src/git/runner';
 import { removalPatch, type LineRange } from '../src/git/patch';
-import { pendingRewordMessage } from '../src/git/todo';
+import { ConflictCheck } from '../src/git/conflictCheck';
+import { pendingRewordMessage, type TodoAction } from '../src/git/todo';
 import { concurrency, git, newRepo, writeFile } from './repo';
 
 const editorScript = path.resolve(__dirname, '../dist/rebaseEditor.js');
@@ -417,5 +418,66 @@ describe('operations', { concurrency }, () => {
     const unstacked = new GitOps(r.git, buildEditorCommand(process.execPath, editorScript), { updateStackedBranches: 'never' });
     await unstacked.reword(r.sha('c1'), 'c1 reworded');
     assert.equal(r.sh('rev-parse', 'lower'), before);
+  });
+
+  // --- the rebase editor -------------------------------------------------------------------------
+
+  test('rebase editor plan: reorder, reword, fixup in one rebase', async () => {
+    const r = setup();
+    await r.ops.rebaseSteps(
+      r.sha('c1'),
+      [
+        { sha: r.sha('c4'), action: 'reword' },
+        { sha: r.sha('c2'), action: 'pick' },
+        { sha: r.sha('c3'), action: 'fixup' },
+      ],
+      { [r.sha('c4')]: 'c4 first now\n\nwith a body' },
+    );
+    assert.deepEqual(r.subjects(), ['c2', 'c4 first now', 'c1']);
+    assert.equal(r.sh('log', '-1', '--format=%B', 'HEAD~1').trim(), 'c4 first now\n\nwith a body');
+    assert.equal(r.sh('show', '--name-only', '--format=', 'HEAD').split('\n').sort().join(','), 'f2.txt,f3.txt');
+    assert.ok(!(await getOperation(r.git)));
+  });
+
+  test('rebase editor plan onto another branch', async () => {
+    const r = setup(2, {
+      key: 'other',
+      build: (dir) => {
+        git(dir, 'checkout', '-q', '-b', 'other', 'HEAD~1');
+        commitFile(dir, 'o.txt', 'o\n', 'o1');
+        git(dir, 'checkout', '-q', '-');
+      },
+    });
+    await r.ops.rebaseSteps(r.sha('c1'), [{ sha: r.sha('c2'), action: 'reword' }], { [r.sha('c2')]: 'c2 on other' }, 'other');
+    assert.deepEqual(r.subjects(), ['c2 on other', 'o1', 'c1']);
+  });
+
+  test('conflict check: a reorder that conflicts, without touching the repository', async () => {
+    const r = setup(1, {
+      key: 'conflicts',
+      build: (dir) => {
+        commitFile(dir, 'f1.txt', 'v2\n', 'edit 1');
+        commitFile(dir, 'f1.txt', 'v3\n', 'edit 2');
+        commitFile(dir, 'other.txt', 'x\n', 'unrelated');
+      },
+    });
+    const shas = ['edit 1', 'edit 2', 'unrelated'].map(r.sha);
+    const parents = new Map(shas.map((sha) => [sha, r.sh('rev-parse', `${sha}^`)]));
+    const start = r.sh('rev-parse', 'HEAD~3^{tree}');
+    const check = new ConflictCheck(r.git, parents, { start, shas });
+    const head = r.sh('rev-parse', 'HEAD');
+    const steps = (order: string[], actions: Record<string, TodoAction> = {}) => order.map((sha) => ({ sha, action: actions[sha] ?? 'pick' }));
+    const conflicts = async (order: string[], actions?: Record<string, TodoAction>) => [...(await check.check(start, steps(order, actions)))!];
+
+    assert.deepEqual(await conflicts(shas), [], 'the original order needs no replay');
+    assert.deepEqual(await conflicts([shas[2], shas[0], shas[1]]), [], 'moving an unrelated commit is clean');
+    assert.deepEqual(await conflicts([shas[1], shas[0], shas[2]]), [
+      [shas[1], ['f1.txt']],
+      [shas[0], ['f1.txt']],
+    ]);
+    assert.deepEqual(await conflicts(shas, { [shas[0]]: 'drop' }), [[shas[1], ['f1.txt']]], 'dropping the first edit');
+    assert.equal(await check.check(start, steps([shas[0], shas[2]]), () => true), undefined, 'cancelled before replaying a step not checked yet');
+    assert.equal(r.sh('rev-parse', 'HEAD'), head);
+    assert.equal(r.sh('status', '--porcelain'), '');
   });
 });

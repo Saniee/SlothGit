@@ -14,8 +14,12 @@ function main(): void {
   if (!file) throw new Error('missing file argument');
 
   if (path.basename(file) === 'git-rebase-todo') {
-    const plan = process.env.SLOTHGIT_REBASE_PLAN;
-    if (plan) fs.writeFileSync(file, transformTodo(fs.readFileSync(file, 'utf8'), JSON.parse(plan) as RebasePlan));
+    const json = process.env.SLOTHGIT_REBASE_PLAN;
+    if (!json) return;
+    const plan = JSON.parse(json) as RebasePlan;
+    fs.writeFileSync(file, transformTodo(fs.readFileSync(file, 'utf8'), plan));
+    // Saved where a paused rebase keeps its reword messages; git deletes it with rebase-merge/.
+    if (plan.messages) fs.writeFileSync(path.join(path.dirname(file), REWORD_MESSAGES_FILE), JSON.stringify(plan.messages));
     return;
   }
 

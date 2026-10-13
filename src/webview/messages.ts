@@ -2,6 +2,7 @@
 // types, so a change on one side that the other doesn't handle is a type error, not a silent no-op.
 import type { GraphRef, GraphRow } from '../git/graph';
 import type { LocalBranch, Person } from '../git/queries';
+import type { PlannedStep } from '../git/todo';
 
 // --- Commit Graph -------------------------------------------------------------------------------
 
@@ -77,3 +78,41 @@ export type FromSync =
   | { type: 'menu'; menu: SyncMenu }
   /** After each render: the visible text, so tests can tell the page really drew the state. */
   | { type: 'rendered'; text: string };
+
+// --- Rebase editor ------------------------------------------------------------------------------
+
+export interface RebaseCommit {
+  sha: string;
+  shortSha: string;
+  subject: string;
+  /** The full message, for rewording. */
+  message: string;
+  author: string;
+  relDate: string;
+  /** Already on the upstream branch: rewriting it means a force push. */
+  pushed: boolean;
+}
+
+export interface RebaseEditorState {
+  /** What is rebased, e.g. "feature/login onto main". */
+  title: string;
+  /** Oldest first, as git applies them. */
+  commits: RebaseCommit[];
+  /** Whether the plan can also be made step by step in the Commits view (not for a rebase from the root). */
+  canPause: boolean;
+}
+
+export type ToRebase =
+  | { type: 'state'; state: RebaseEditorState }
+  /** Answer to a 'check' with the same id: conflicted files by step SHA, or why the check failed. */
+  | { type: 'conflicts'; id: number; conflicts: Record<string, string[]>; error?: string }
+  /** Sets the plan (oldest first) as if it was made on the page; for tests. */
+  | { type: 'apply'; steps: PlannedStep[] };
+
+export type FromRebase =
+  | { type: 'ready' | 'cancel' | 'pause' }
+  /** The plan changed: predict its conflicts. Steps are oldest first. */
+  | { type: 'check'; id: number; steps: PlannedStep[] }
+  | { type: 'start'; steps: PlannedStep[]; messages: Record<string, string> }
+  /** After each render: each row as "action subject" (plus " ⚠" when it may conflict) and the status line, for tests. */
+  | { type: 'rendered'; rows: string[]; status: string };

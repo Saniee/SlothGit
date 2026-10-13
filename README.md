@@ -13,6 +13,7 @@ Open **Get Started with SlothGit** on VS Code's Welcome page, or **Learn Git Con
 - **Undo / redo** (↶ / ↷ on the Commits view) for commits, amends, resets, rebases, merges, cherry-picks and checkouts, like lazygit's `z` / `Z`. It works from the reflog, so it covers actions run outside SlothGit too.
 - **Branches:** local branches (current first, then most recently used) with ahead/behind counts, remotes, tags and worktrees in one tree. Checkout, merge, rebase (whole branch, from a marked base, or interactive), fast-forward without checking out, push / force push with lease, upstreams, pull requests, delete merged branches, and moving commits made on the wrong branch to a new one.
 - **Commits:** rewrite history from the commit list: squash, fixup, drop, reword, edit, move up / down, amend staged changes into an older commit, fixup commits and autosquash, amend author and co-authors, cherry-pick, revert, reset. Works across merge commits (`--rebase-merges`) and can move stacked branches along (`slothgit.updateStackedBranches`).
+- **Rebase editor:** **Interactive Rebase from Here…** on a commit, or **Interactive Rebase** when rebasing onto a branch, lists the commits in an editor tab. Drag them to reorder, pick, reword, edit, squash, fixup or drop each, and see which ones are likely to conflict before you start. Start Rebase runs the whole plan at once.
 - **Patches:** remove or move a file's changes, or selected lines in a commit's diff, out of a commit, to the index or a new commit. Collect several into a custom patch (status bar) and move it into any other commit.
 - **Paused rebases:** the remaining steps are listed at the top of the Commits view. Right-click to change them (pick, reword, squash, fixup, edit, drop), reorder with ↑ / ↓, then Continue, Skip or Abort from the title bar or status bar.
 - **Commit colours** as in lazygit: green when on the main branch (`slothgit.mainBranches`), yellow when pushed, red when not. Rewriting pushed commits asks first.
@@ -41,7 +42,7 @@ SlothGit was called CodeGit before 1.0.0. `codegit.*` settings are copied over o
 
 SlothGit calls the git CLI that the built-in Git extension uses. Every rewrite is a `git rebase --interactive --autostash`. Git runs `dist/rebaseEditor.js` as the sequence editor, and it rewrites the todo list from a plan. If anything doesn't match the plan, it exits non-zero and git aborts before touching history. Undo replays the HEAD reflog as a stack of actions.
 
-The Commit Graph and the Sync view are webview pages. Each lives in `src/webview/<page>/` as markup (`body.html`), styles (`style.css`) and a script (`main.ts`, type-checked against the DOM by `src/webview/tsconfig.json`). esbuild bundles them into `dist/webview/`. The messages between a page and the extension are typed in `src/webview/messages.ts`, which both sides import.
+The Commit Graph, the Sync view and the rebase editor are webview pages. Each lives in `src/webview/<page>/` as markup (`body.html`), styles (`style.css`) and a script (`main.ts`, type-checked against the DOM by `src/webview/tsconfig.json`). esbuild bundles them into `dist/webview/`. The rebase editor predicts conflicts by replaying the planned order with `git merge-tree` on trees only (Git 2.45 or newer), so nothing in the repository changes until you start. The messages between a page and the extension are typed in `src/webview/messages.ts`, which both sides import.
 
 ## Development
 
@@ -70,8 +71,10 @@ git push origin 1.0.0
 To publish to [Open VSX](https://open-vsx.org) by hand, create an access token in your Open VSX settings and create the `Saniee` namespace once (`npx ovsx create-namespace Saniee -p <token>`). Then run:
 
 ```bash
-OVSX_PAT=<token> npm run publish:ovsx
+npm run publish:ovsx
 ```
+
+The script reads the token from `OVSX_PAT`, either set in your shell or in a `.env` file in the project folder (`OVSX_PAT=<token>`). `.env` is ignored by git and left out of the package.
 
 The release workflow does the same automatically when the repository has an `OVSX_PAT` secret.
 
