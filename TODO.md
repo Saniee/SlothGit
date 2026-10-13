@@ -20,5 +20,5 @@ From the 1.0.0 tech-debt review and code review, not done yet:
 
 ## Features
 
-- **Rebase editor, part 3: a conflicts panel.** The editor (`src/views/rebasePanel.ts`, `src/webview/rebase/`) plans the rebase and predicts conflicts. Still to do: when a rebase stops on a conflict, one panel listing every conflicted file with both sides, keep ours / keep theirs / open in the merge editor, then Continue, Skip or Abort.
+- **Conflicts panel: try the Merge Editor button by hand.** It runs the built-in Git extension's `git.openMergeEditor` (falling back to opening the file); no automated test opens the merge editor.
 - **Rebase editor: drag by hand once in VS Code.** Dropping rows was tested with synthetic drag events in a browser, and the e2e tests set the plan through a test message; no automated test drags with a real mouse.

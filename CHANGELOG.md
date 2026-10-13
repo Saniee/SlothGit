@@ -4,6 +4,7 @@
 
 ### Added
 - **Rebase editor:** **Interactive Rebase from Here…** on a commit (Commits view and Commit Graph) opens the commits from there to the newest in an editor tab. Drag them (or press Alt+↑ / Alt+↓) to reorder, choose pick, reword (with a message box), edit, squash, fixup or drop for each, and see which steps are likely to conflict, and in which files, before anything runs. **Start Rebase** runs the whole plan at once.
+- **Conflicts panel:** when a rebase, merge, cherry-pick or revert stops on conflicts, **Resolve Conflicts** (in the prompt, the operation menu and the Commits and Branches title bars) lists every conflicted file in one editor tab. Each conflict shows the current and incoming lines side by side, with Keep Current, Keep Incoming and Keep Both; whole files can keep one side (including deletions), open in the merge editor, be marked resolved or reopened. Continue, Skip and Abort are at the bottom, and the panel follows the operation to its next stop. A rebase started from the rebase editor opens it by itself.
 
 ### Changed
 - **Interactive Rebase** in the branch rebase menu opens the rebase editor. Its **Plan in Commits View** button starts the rebase paused before the first commit, as before.

@@ -685,6 +685,35 @@ export class GitOps {
     await this.git.exec([operation, '--skip'], { env: this.continueEnv(operation) });
   }
 
+  // --- conflicts -------------------------------------------------------------
+
+  /**
+   * Resolves a conflicted file by taking one side whole: that side's version, or its deletion when that side
+   * deleted the file. "current" is HEAD (git's --ours), "incoming" the commit being applied (--theirs).
+   */
+  async takeSide(file: string, side: 'current' | 'incoming'): Promise<void> {
+    const stage = side === 'current' ? '2' : '3';
+    // "<mode> <object> <stage>\t<path>" for each side git has of the file.
+    const stages = await this.git.run(['ls-files', '-u', '-z', '--', file]);
+    if (!stages) throw new UserError(`${file} is not in conflict any more.`);
+    if (stages.split('\0').some((entry) => entry.split(/\s/)[2] === stage)) {
+      await this.git.exec(['checkout', side === 'current' ? '--ours' : '--theirs', '--', file]);
+      await this.git.exec(['add', '--', file]);
+    } else {
+      await this.git.exec(['rm', '-q', '--', file]);
+    }
+  }
+
+  /** Marks a conflicted file resolved as it is in the working tree (staged, or removed when it was deleted). */
+  async markResolved(file: string): Promise<void> {
+    await this.git.exec(['add', '-A', '--', file]);
+  }
+
+  /** Puts a resolved file back in conflict, with the markers, from git's record of the conflict. */
+  async reopenConflict(file: string): Promise<void> {
+    await this.git.exec(['checkout', '-m', '--', file]);
+  }
+
   // --- stashes ---------------------------------------------------------------
 
   async stashPush(mode: 'all' | 'staged' | 'keepIndex', message: string): Promise<void> {

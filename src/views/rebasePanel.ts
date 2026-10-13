@@ -156,7 +156,7 @@ export class RebasePanel implements vscode.Disposable {
         void vscode.commands.executeCommand('slothgit.commits.focus');
         return 'The rebase stopped at a commit marked Edit. Change it (amend, split, …), then Continue.';
       }
-    });
+    }, { resolveInPanel: true });
     if (ok) {
       await this.target.afterStart?.();
       this.dispose();

@@ -2,6 +2,7 @@
 // types, so a change on one side that the other doesn't handle is a type error, not a silent no-op.
 import type { GraphRef, GraphRow } from '../git/graph';
 import type { LocalBranch, Person } from '../git/queries';
+import type { ConflictHunk, ConflictKind, HunkChoice } from '../git/conflicts';
 import type { PlannedStep } from '../git/todo';
 
 // --- Commit Graph -------------------------------------------------------------------------------
@@ -116,3 +117,40 @@ export type FromRebase =
   | { type: 'start'; steps: PlannedStep[]; messages: Record<string, string> }
   /** After each render: each row as "action subject" (plus " ⚠" when it may conflict) and the status line, for tests. */
   | { type: 'rendered'; rows: string[]; status: string };
+
+// --- Conflicts panel ----------------------------------------------------------------------------
+
+export interface ConflictFileState {
+  path: string;
+  /** Unset once resolved (staged) during this stop. */
+  kind?: ConflictKind;
+  /** The conflict hunks still in the file; empty when it has no markers (left, or ever, e.g. deleted on one side). */
+  hunks: ConflictHunk[];
+  binary?: boolean;
+}
+
+export interface ConflictsState {
+  /** "Rebase stopped", or undefined when nothing is in progress any more. */
+  title?: string;
+  /** Where it stopped, e.g. "Applying 1a2b3c4 Add search (step 2 of 5) onto main". */
+  detail: string;
+  /** What "current" and "incoming" mean for this operation. */
+  current: string;
+  incoming: string;
+  canSkip: boolean;
+  /** Conflicted files, then the ones resolved during this stop. */
+  files: ConflictFileState[];
+}
+
+export type ToConflicts = { type: 'state'; state: ConflictsState };
+
+export type FromConflicts =
+  | { type: 'ready' }
+  /** Resolve the whole file with one side. */
+  | { type: 'take'; path: string; side: 'current' | 'incoming' }
+  /** Resolve one hunk; `hunk` is what the page showed, so a file changed meanwhile isn't edited blindly. */
+  | { type: 'hunk'; path: string; index: number; hunk: ConflictHunk; choice: HunkChoice }
+  | { type: 'markResolved' | 'reopen' | 'openFile' | 'openMerge'; path: string }
+  | { type: 'operation'; action: 'continue' | 'skip' | 'abort' }
+  /** After each render: the visible text of each file card and the status line, for tests. */
+  | { type: 'rendered'; files: string[]; status: string };

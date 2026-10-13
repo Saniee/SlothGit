@@ -261,17 +261,81 @@ scenario('rebase editor: from a commit, reorder, reword and run it in one go', a
   assert.equal(t.api.rebaseEditor(), undefined, 'the editor closes');
 });
 
-scenario('rebase editor: a plan with a conflict stops there, and can be aborted', async (t) => {
+/** The conflicts panel once its page shows `files` ("path: state" each). */
+async function conflictsPanel(t: Context, files: string[]) {
+  const panel = await waitFor('the conflicts panel', () => t.api.conflictsPanel());
+  await waitFor(`the conflicts panel to show ${files.join(', ')}`, () => panel.rendered?.files.join(', ') === files.join(', '));
+  return panel;
+}
+
+scenario('rebase editor: a plan with conflicts opens the conflicts panel, which follows the rebase to its next stop', async (t) => {
   const before = t.rev('HEAD');
   await t.run('slothgit.commit.rebaseEditor', [await t.commit('Fix typo in docs')]);
   const editor = await rebaseEditor(t, ['pick Add profile page', 'pick Fix typo in docs']);
   const [typo, profile] = [t.rev('HEAD~1'), t.rev('HEAD')];
-  prompts.queue.push(button('Abort', /Rebase stopped/));
   await editor.start([{ sha: profile, action: 'pick' }, { sha: typo, action: 'pick' }], {});
-  t.check('start');
+  t.check('start (no prompt: the panel shows the conflict)');
+  const panel = await conflictsPanel(t, ['README.md: 1 conflict']);
+  assert.match(panel.state!.detail, /applying [0-9a-f]+ Add profile page \(step 1 of 2\)/);
+  await panel.take('README.md', 'incoming');
+  await conflictsPanel(t, ['README.md: resolved']);
+  await panel.runOperation('continue');
+  t.check('continue (no prompt: the panel shows the next conflict)');
+  await conflictsPanel(t, ['README.md: 1 conflict']);
+  assert.match(panel.state!.detail, /applying [0-9a-f]+ Fix typo in docs \(step 2 of 2\)/);
+  await panel.runOperation('abort');
   assert.ok(!t.operationInProgress());
+  assert.equal(t.api.conflictsPanel(), undefined, 'the panel closes');
   assert.equal(t.rev('HEAD'), before);
   assert.equal(t.status(), BASELINE);
+});
+
+scenario('conflicts panel: resolve a hunk, reopen, keep a side, then continue the merge', async (t) => {
+  await t.cleanTree();
+  await t.run('slothgit.branch.merge', [await t.localBranch('conflict/status-line')], [pick('Merge'), button('Resolve Conflicts', /Merge stopped on conflicts/)]);
+  const panel = await conflictsPanel(t, ['app.txt: 1 conflict']);
+  assert.equal(panel.state!.detail, 'Merging conflict/status-line into main.');
+  const [hunk] = panel.state!.files[0].hunks;
+  assert.ok(hunk.current.includes('status: BUG') && hunk.incoming.includes('status: maintenance'), JSON.stringify(hunk));
+
+  await panel.resolveHunk('app.txt', 0, 'incoming', hunk);
+  await conflictsPanel(t, ['app.txt: resolved']);
+  assert.match(panel.rendered!.status, /All conflicts are resolved/);
+  assert.match(t.read('app.txt'), /status: maintenance/);
+  assert.equal(t.status(), 'M  app.txt', 'resolved and staged');
+
+  await panel.reopen('app.txt');
+  await conflictsPanel(t, ['app.txt: 1 conflict']);
+  assert.equal(t.status(), 'UU app.txt');
+
+  await panel.take('app.txt', 'current');
+  await conflictsPanel(t, ['app.txt: resolved']);
+  assert.match(t.read('app.txt'), /status: BUG/);
+  await panel.take('app.txt', 'incoming');
+  assert.ok(t.saw('warning', /not in conflict any more/), 'a resolved file is left alone');
+  assert.match(t.read('app.txt'), /status: BUG/);
+
+  await panel.runOperation('continue');
+  assert.ok(!t.operationInProgress());
+  assert.equal(t.rev('HEAD^2'), t.rev('conflict/status-line'));
+  assert.equal(t.api.conflictsPanel(), undefined, 'the panel closes once the merge is done');
+});
+
+scenario('conflicts panel: Skip in a stopped rebase leaves the commit out', async (t) => {
+  await t.checkout('conflict/status-line');
+  await t.run('slothgit.branch.rebase', [await t.localBranch('main')], [pick('Simple Rebase'), button('Resolve Conflicts', /Rebase stopped on conflicts/)]);
+  const panel = await conflictsPanel(t, ['app.txt: 1 conflict']);
+  assert.match(panel.state!.incoming, /Change status line, the commit being applied/);
+  await panel.runOperation('skip');
+  assert.ok(!t.operationInProgress());
+  assert.equal(t.rev('HEAD'), t.rev('main'), 'the only commit was skipped');
+  assert.equal(t.api.conflictsPanel(), undefined);
+});
+
+scenario('conflicts panel: without an operation in progress it says so', async (t) => {
+  await t.run('slothgit.conflicts.open');
+  assert.ok(t.saw('info', /No rebase, merge, cherry-pick or revert is in progress/));
+  assert.equal(t.api.conflictsPanel(), undefined);
 });
 
 scenario('rebase editor: from the branch rebase picker, onto another branch', async (t) => {

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { GitOps, UserError, type ResetMode } from './git/operations';
+import { getConflicts } from './git/conflicts';
 import { getOperation, type Operation } from './git/queries';
 import { branchNameError } from './git/refName';
 import { GitError } from './git/runner';
@@ -13,9 +14,22 @@ const OPERATION_NAMES: Record<Operation, string> = {
   merge: 'Merge',
 };
 
+export interface RunOptions {
+  /** If the operation stops with conflicts, open the conflicts panel instead of asking what to do. */
+  resolveInPanel?: boolean;
+}
+
+/**
+ * Takes over when an operation stops with conflicts. `force` is RunOptions.resolveInPanel; returns true when it
+ * handled it (the conflicts panel is showing them), so no prompt is needed.
+ */
+export type ConflictHandler = (force: boolean) => boolean;
+
 export interface Runner {
   /** Runs a git operation with progress, error reporting and a refresh afterwards. Resolves true on success. */
-  run(title: string, fn: (ops: GitOps, repo: Repository) => Promise<string | void>): Promise<boolean>;
+  run(title: string, fn: (ops: GitOps, repo: Repository) => Promise<string | void>, options?: RunOptions): Promise<boolean>;
+  /** Set once by the conflicts panel's owner. */
+  onConflicts(handler: ConflictHandler): void;
   confirm(message: string, action: string): Promise<boolean>;
   /** Asks for soft/mixed/hard and resets the current branch to `rev`. */
   resetTo(rev: string, label: string): Promise<void>;
@@ -29,8 +43,13 @@ export function createRunner(
   refreshAll: (force: boolean) => Promise<void>,
 ): Runner {
   let busy = false;
+  let conflictHandler: ConflictHandler | undefined;
 
-  async function run(title: string, fn: (ops: GitOps, repo: Repository) => Promise<string | void>): Promise<boolean> {
+  async function run(
+    title: string,
+    fn: (ops: GitOps, repo: Repository) => Promise<string | void>,
+    options: RunOptions = {},
+  ): Promise<boolean> {
     const ops = repos.ops();
     const repo = repos.repository;
     if (!ops || !repo) {
@@ -59,11 +78,11 @@ export function createRunner(
     }
     // Reported only now that this operation no longer counts as running: the conflict prompt's
     // Continue/Abort buttons start a new one.
-    if (failure) await reportError(ops, failure.error);
+    if (failure) await reportError(ops, failure.error, options);
     return !failure;
   }
 
-  async function reportError(ops: GitOps, error: unknown): Promise<void> {
+  async function reportError(ops: GitOps, error: unknown, options: RunOptions): Promise<void> {
     if (error instanceof UserError) {
       void vscode.window.showWarningMessage(error.message);
       return;
@@ -73,13 +92,23 @@ export function createRunner(
 
     const operation = await getOperation(ops.git).catch(() => undefined);
     if (operation) {
-      const choice = await vscode.window.showWarningMessage(
-        `${OPERATION_NAMES[operation]} stopped. Resolve the conflicts in Source Control, stage them, then continue.`,
-        'Continue',
-        'Abort',
-        'Open Source Control',
-      );
-      if (choice === 'Continue') await vscode.commands.executeCommand('slothgit.operation.continue');
+      const conflicted = (await getConflicts(ops.git).catch(() => [])).length > 0;
+      if (conflicted && conflictHandler?.(!!options.resolveInPanel)) return;
+      const choice = conflicted
+        ? await vscode.window.showWarningMessage(
+            `${OPERATION_NAMES[operation]} stopped on conflicts. Resolve them, then continue.`,
+            'Resolve Conflicts',
+            'Continue',
+            'Abort',
+          )
+        : await vscode.window.showWarningMessage(
+            `${OPERATION_NAMES[operation]} stopped. Resolve the conflicts in Source Control, stage them, then continue.`,
+            'Continue',
+            'Abort',
+            'Open Source Control',
+          );
+      if (choice === 'Resolve Conflicts') await vscode.commands.executeCommand('slothgit.conflicts.open');
+      else if (choice === 'Continue') await vscode.commands.executeCommand('slothgit.operation.continue');
       else if (choice === 'Abort') await vscode.commands.executeCommand('slothgit.operation.abort');
       else if (choice === 'Open Source Control') await vscode.commands.executeCommand('workbench.view.scm');
       return;
@@ -115,7 +144,15 @@ export function createRunner(
     );
   }
 
-  return { run, confirm, resetTo, askBranchName };
+  return {
+    run,
+    onConflicts: (handler) => {
+      conflictHandler = handler;
+    },
+    confirm,
+    resetTo,
+    askBranchName,
+  };
 }
 
 /** How long an operation runs before it also gets a notification, so slow pushes or rebases don't look stuck. */

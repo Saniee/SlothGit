@@ -281,6 +281,12 @@
         "icon": "$(debug-continue)"
       },
       {
+        "command": "slothgit.conflicts.open",
+        "title": "Resolve Conflicts…",
+        "category": "SlothGit",
+        "icon": "$(git-merge)"
+      },
+      {
         "command": "slothgit.operation.abort",
         "title": "Abort Rebase/Merge/Cherry-Pick",
         "category": "SlothGit",
@@ -876,6 +882,11 @@
           "group": "navigation@5"
         },
         {
+          "command": "slothgit.conflicts.open",
+          "when": "view == slothgit.commits && slothgit.operation",
+          "group": "navigation@0"
+        },
+        {
           "command": "slothgit.operation.continue",
           "when": "view == slothgit.commits && slothgit.operation",
           "group": "navigation@1"
@@ -1003,6 +1014,11 @@
         {
           "command": "slothgit.commit.clearCherryPick",
           "when": "view == slothgit.branches && slothgit.hasCherryPicks",
+          "group": "navigation@0"
+        },
+        {
+          "command": "slothgit.conflicts.open",
+          "when": "view == slothgit.branches && slothgit.operation",
           "group": "navigation@0"
         },
         {
@@ -1605,6 +1621,10 @@
         {
           "command": "slothgit.commit.clearCherryPick",
           "when": "slothgit.hasCherryPicks"
+        },
+        {
+          "command": "slothgit.conflicts.open",
+          "when": "slothgit.operation"
         },
         {
           "command": "slothgit.operation.continue",

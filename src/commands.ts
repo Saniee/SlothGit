@@ -466,6 +466,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     'slothgit.operation.menu': async () => {
       const picked = await vscode.window.showQuickPick(
         [
+          { label: '$(git-merge) Resolve Conflicts…', command: 'slothgit.conflicts.open' },
           { label: '$(debug-continue) Continue', command: 'slothgit.operation.continue' },
           { label: '$(debug-step-over) Skip Current Commit', command: 'slothgit.operation.skip' },
           { label: '$(debug-stop) Abort', command: 'slothgit.operation.abort' },
