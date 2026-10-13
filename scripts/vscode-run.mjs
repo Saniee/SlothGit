@@ -1,4 +1,4 @@
-// Shared by smoke.mjs and e2e.mjs: runs a compiled test module inside the installed VS Code, with CodeGit
+// Shared by smoke.mjs and e2e.mjs: runs a compiled test module inside the installed VS Code, with SlothGit
 // loaded from this folder and a throwaway profile, so your own settings and extensions are untouched.
 import { execFileSync, spawn } from 'node:child_process';
 import * as readline from 'node:readline';

@@ -105,6 +105,6 @@ export function fileTreeItem(node: FileNode, root: vscode.Uri): vscode.TreeItem 
   item.tooltip = `${STATUS_NAMES[change.status] ?? change.status}: ${change.oldPath ? `${change.oldPath} → ` : ''}${change.path}`;
   // file:log = under a commit in the Commits view (history can be rewritten), file:commit = other commits, file:stash.
   item.contextValue = node.commit ? (node.commit.source === 'log' ? 'file:log' : 'file:commit') : 'file:stash';
-  item.command = { command: 'codegit.openFileDiff', title: 'Open Diff', arguments: [node] };
+  item.command = { command: 'slothgit.openFileDiff', title: 'Open Diff', arguments: [node] };
   return item;
 }

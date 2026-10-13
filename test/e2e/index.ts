@@ -2,7 +2,7 @@
 // the playground between scenarios, and writes a JSON report for the launcher.
 import * as fs from 'node:fs';
 import * as vscode from 'vscode';
-import type { CodeGitTestApi } from '../../src/extension';
+import type { SlothGitTestApi } from '../../src/extension';
 import { Context } from './harness';
 import scenarios from './scenarios';
 
@@ -13,17 +13,17 @@ function timeout(ms: number): Promise<never> {
 }
 
 export async function run(): Promise<void> {
-  const playground = process.env.CODEGIT_E2E_PLAYGROUND!;
-  const report = process.env.CODEGIT_E2E_REPORT!;
-  const filters = (process.env.CODEGIT_E2E_FILTER ?? '').split(/\s+/).filter(Boolean);
+  const playground = process.env.SLOTHGIT_E2E_PLAYGROUND!;
+  const report = process.env.SLOTHGIT_E2E_REPORT!;
+  const filters = (process.env.SLOTHGIT_E2E_FILTER ?? '').split(/\s+/).filter(Boolean);
   const results: { name: string; ok: boolean; ms: number; error?: string }[] = [];
 
-  const ext = vscode.extensions.all.find((e) => e.packageJSON.name === 'codegit')!;
-  const api = (await ext.activate()) as CodeGitTestApi;
+  const ext = vscode.extensions.all.find((e) => e.packageJSON.name === 'slothgit')!;
+  const api = (await ext.activate()) as SlothGitTestApi;
   const gitApi = (await vscode.extensions.getExtension('vscode.git')!.activate()).getAPI(1);
   for (let i = 0; i < 100 && gitApi.repositories.length === 0; i++) await new Promise((r) => setTimeout(r, 100));
   // Views only load while visible.
-  for (const view of ['codegit.branches', 'codegit.commits', 'codegit.stashes', 'codegit.reflog']) {
+  for (const view of ['slothgit.sync', 'slothgit.branches', 'slothgit.commits', 'slothgit.stashes', 'slothgit.reflog']) {
     await vscode.commands.executeCommand(`${view}.focus`);
   }
 
@@ -39,7 +39,7 @@ export async function run(): Promise<void> {
   let failures = 0;
   for (const [i, s] of selected.entries()) {
     const progress = `${i + 1}/${selected.length}`;
-    status.text = `$(beaker) CodeGit e2e ${progress}${failures ? ` · ${failures} failed` : ''}: ${s.name}`;
+    status.text = `$(beaker) SlothGit e2e ${progress}${failures ? ` · ${failures} failed` : ''}: ${s.name}`;
     const start = Date.now();
     try {
       await Promise.race([s.run(t), timeout(TIMEOUT_MS)]);

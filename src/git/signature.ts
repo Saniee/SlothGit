@@ -33,7 +33,7 @@ function refStamps(dir: string, out: string[]): void {
 }
 
 /**
- * A fingerprint of what CodeGit's views show (branches, tags, remotes, stashes, HEAD and the reflog, worktrees,
+ * A fingerprint of what SlothGit's views show (branches, tags, remotes, stashes, HEAD and the reflog, worktrees,
  * operations in progress), from file timestamps in the git directory, so checking it doesn't run git. Changes to
  * the working tree or index don't change it.
  */

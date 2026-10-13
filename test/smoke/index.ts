@@ -1,14 +1,14 @@
 // Runs inside a real VS Code (see scripts/smoke.mjs). Opens the scratch repository the launcher created,
-// walks every CodeGit tree in several repository states, and checks every declared command is registered.
+// walks every SlothGit tree in several repository states, and checks every declared command is registered.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { CodeGitTestApi } from '../../src/extension';
+import type { SlothGitTestApi } from '../../src/extension';
 import type { Node } from '../../src/views/nodes';
 
-const VIEWS = ['codegit.branches', 'codegit.commits', 'codegit.stashes', 'codegit.reflog'];
+const VIEWS = ['slothgit.branches', 'slothgit.commits', 'slothgit.stashes', 'slothgit.reflog'];
 
 function log(message: string): void {
   // Ends up in the launcher's console.
@@ -32,7 +32,7 @@ async function walk(provider: vscode.TreeDataProvider<Node>, depth: number): Pro
   return counts;
 }
 
-async function snapshot(api: CodeGitTestApi, label: string): Promise<Record<string, Map<string, number>>> {
+async function snapshot(api: SlothGitTestApi, label: string): Promise<Record<string, Map<string, number>>> {
   await api.refreshAll(true);
   const result: Record<string, Map<string, number>> = {};
   for (const [name, provider] of Object.entries(api.providers)) {
@@ -53,9 +53,9 @@ export async function run(): Promise<void> {
   assert.ok(repo, 'the launcher should open the scratch repository');
   const sh = (...args: string[]) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
 
-  const ext = vscode.extensions.all.find((e) => e.packageJSON.name === 'codegit');
-  assert.ok(ext, 'CodeGit extension not found');
-  const api = (await ext.activate()) as CodeGitTestApi | undefined;
+  const ext = vscode.extensions.all.find((e) => e.packageJSON.name === 'slothgit');
+  assert.ok(ext, 'SlothGit extension not found');
+  const api = (await ext.activate()) as SlothGitTestApi | undefined;
   assert.ok(api, 'activate() returned nothing; is the built-in Git extension enabled?');
 
   // Every command in package.json is registered.
@@ -70,7 +70,7 @@ export async function run(): Promise<void> {
   for (let i = 0; i < 100 && gitApi.repositories.length === 0; i++) await new Promise((r) => setTimeout(r, 100));
   assert.ok(gitApi.repositories.length > 0, 'the Git extension found the scratch repository');
   for (const view of VIEWS) await vscode.commands.executeCommand(`${view}.focus`);
-  await vscode.commands.executeCommand('codegit.reflog.focus');
+  await vscode.commands.executeCommand('slothgit.reflog.focus');
 
   // 1. Normal state.
   let s = await snapshot(api, 'normal');
@@ -84,11 +84,11 @@ export async function run(): Promise<void> {
 
   // 2. File filter via the command the Explorer menu uses.
   // f2.txt is only touched by "commit 2".
-  await vscode.commands.executeCommand('codegit.commits.showFileHistory', vscode.Uri.file(path.join(repo, 'f2.txt')));
+  await vscode.commands.executeCommand('slothgit.commits.showFileHistory', vscode.Uri.file(path.join(repo, 'f2.txt')));
   s = await snapshot(api, 'filtered by f2.txt');
   const shown = [...s.commits].filter(([k]) => k.startsWith('commit')).reduce((sum, [, v]) => sum + v, 0);
   assert.equal(shown, 1, 'the filter limits the log to commits touching the file');
-  await vscode.commands.executeCommand('codegit.commits.clearFilter');
+  await vscode.commands.executeCommand('slothgit.commits.clearFilter');
 
   // 3. Paused interactive rebase: the todo list shows up in the Commits view.
   const second = sh('rev-list', '--reverse', 'HEAD').split('\n')[1];
@@ -107,26 +107,26 @@ export async function run(): Promise<void> {
   sh('bisect', 'reset');
 
   // 5. Non-interactive commands run without errors.
-  await vscode.commands.executeCommand('codegit.refresh');
-  await vscode.commands.executeCommand('codegit.compare.clear');
-  await vscode.commands.executeCommand('codegit.commit.clearCherryPick');
+  await vscode.commands.executeCommand('slothgit.refresh');
+  await vscode.commands.executeCommand('slothgit.compare.clear');
+  await vscode.commands.executeCommand('slothgit.commit.clearCherryPick');
   log('commands executed');
 
   // Opening diffs: the contents are loaded before the editor appears, so it is never blank.
   const [head] = (await api.providers.commits.getChildren()) as Node[];
   const files = (await api.providers.commits.getChildren(head)) as Node[];
-  await vscode.commands.executeCommand('codegit.openFileDiff', files[0]);
+  await vscode.commands.executeCommand('slothgit.openFileDiff', files[0]);
   const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
   assert.ok(tab?.input instanceof vscode.TabInputTextDiff, 'a diff editor opened');
   const loaded = vscode.workspace.textDocuments.find((d) => d.uri.toString() === (tab.input as vscode.TabInputTextDiff).modified.toString());
   assert.ok(loaded && loaded.getText().length > 0, 'the diff content was loaded');
-  await vscode.commands.executeCommand('codegit.commit.openChanges', head);
+  await vscode.commands.executeCommand('slothgit.commit.openChanges', head);
   log(`diffs open with content (${tab.label})`);
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 
-  // 6. The Changes title-bar buttons forward to the built-in Git commands for the right repository.
-  await vscode.commands.executeCommand('codegit.scm.fetch', gitApi.repositories[0]);
-  await vscode.commands.executeCommand('codegit.scm.pull', gitApi.repositories[0]);
+  // 6. The Sync view's Fetch and Pull buttons.
+  await vscode.commands.executeCommand('slothgit.sync.fetch');
+  await vscode.commands.executeCommand('slothgit.sync.pull');
   assert.equal(sh('log', '-1', '--format=%s'), 'upstream change', 'Pull fast-forwarded main');
   log('fetch / pull buttons work');
 

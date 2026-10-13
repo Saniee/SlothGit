@@ -19,8 +19,8 @@ export class CustomPatch implements vscode.Disposable {
   readonly onDidChange = this.emitter.event;
 
   constructor() {
-    this.status.command = 'codegit.patch.menu';
-    this.status.tooltip = 'CodeGit: custom patch. Click for what to do with it.';
+    this.status.command = 'slothgit.patch.menu';
+    this.status.tooltip = 'SlothGit: custom patch. Click for what to do with it.';
   }
 
   /** The commit the changes come from. */
@@ -52,7 +52,7 @@ export class CustomPatch implements vscode.Disposable {
 
   private changed(): void {
     const count = this.files.size;
-    void vscode.commands.executeCommand('setContext', 'codegit.hasPatch', count > 0);
+    void vscode.commands.executeCommand('setContext', 'slothgit.hasPatch', count > 0);
     if (count && this.source) {
       this.status.text = `$(diff) Patch: ${count} file${count === 1 ? '' : 's'} from ${this.source.shortSha}`;
       this.status.show();

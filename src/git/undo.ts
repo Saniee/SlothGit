@@ -1,11 +1,16 @@
 // Reflog-based undo/redo, modelled on lazygit's. Pure logic; GitOps applies the result.
 //
-// The HEAD reflog is replayed oldest to newest as a stack of user actions. CodeGit's own undo and
+// The HEAD reflog is replayed oldest to newest as a stack of user actions. SlothGit's own undo and
 // redo steps are recorded in the reflog with GIT_REFLOG_ACTION set to the markers below, so a later
 // replay knows which actions are already undone. A new action after an undo clears the redo stack.
 
-export const UNDO_MARKER = '[codegit undo]';
-export const REDO_MARKER = '[codegit redo]';
+export const UNDO_MARKER = '[slothgit undo]';
+export const REDO_MARKER = '[slothgit redo]';
+
+// Written before the extension was renamed from CodeGit, and still recognised. Remove after 2.0.0, together
+// with migrateSettings in extension.ts.
+const LEGACY_UNDO_MARKER = '[codegit undo]';
+const LEGACY_REDO_MARKER = '[codegit redo]';
 
 export interface ReflogItem {
   sha: string;
@@ -57,10 +62,10 @@ export function planUndo(entries: ReflogItem[]): UndoPlan {
 
   items.forEach((entry, i) => {
     const previous = items[i - 1]?.sha;
-    if (entry.subject.startsWith(UNDO_MARKER)) {
+    if (entry.subject.startsWith(UNDO_MARKER) || entry.subject.startsWith(LEGACY_UNDO_MARKER)) {
       const action = done.pop();
       if (action) redo.push(action);
-    } else if (entry.subject.startsWith(REDO_MARKER)) {
+    } else if (entry.subject.startsWith(REDO_MARKER) || entry.subject.startsWith(LEGACY_REDO_MARKER)) {
       const action = redo.pop();
       if (action) done.push(action);
     } else if (inRebase) {

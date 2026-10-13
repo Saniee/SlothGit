@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
+  currentBranch,
   EMPTY_TREE,
   getBisectState,
   getCommitMessage,
@@ -116,9 +117,9 @@ export class GitOps {
     const env: Record<string, string> = {
       GIT_SEQUENCE_EDITOR: this.editorCommand,
       GIT_EDITOR: this.editorCommand,
-      CODEGIT_REBASE_PLAN: JSON.stringify(plan),
+      SLOTHGIT_REBASE_PLAN: JSON.stringify(plan),
     };
-    if (options.message !== undefined) env.CODEGIT_COMMIT_MESSAGE = options.message;
+    if (options.message !== undefined) env.SLOTHGIT_COMMIT_MESSAGE = options.message;
     const autosquash = options.autosquash ? '--autosquash' : '--no-autosquash';
     const range = options.onto ? ['--onto', options.onto, base] : [base];
     await this.git.exec(['rebase', '--interactive', '--autostash', autosquash, ...merges, ...this.updateRefsFlags(), ...range], { env });
@@ -205,7 +206,7 @@ export class GitOps {
     const base = await this.ancestor(sha, 1);
     await this.assertNotMerges([sha]);
     // Temporary commit; it is folded into the target and its message discarded, so skip hooks.
-    await this.git.exec(['commit', '--no-verify', '-m', `codegit: amend ${sha}`]);
+    await this.git.exec(['commit', '--no-verify', '-m', `slothgit: amend ${sha}`]);
     const temp = await headSha(this.git);
     try {
       await this.rebase(base, { fixupInto: { sha: temp, target: sha } });
@@ -265,7 +266,7 @@ export class GitOps {
       const parent = (await this.hasParent(sha)) ? `${sha}^` : EMPTY_TREE;
       const paths = changes.flatMap((c) => (c.oldPath ? [c.oldPath, c.path] : [c.path]));
       const patch = await this.git.run(['diff', '--binary', parent, sha, '--', ...paths]);
-      patchFile = await this.git.gitDirPath('codegit-uncommit.patch');
+      patchFile = await this.git.gitDirPath('slothgit-uncommit.patch');
       fs.writeFileSync(patchFile, patch);
     }
 
@@ -299,8 +300,8 @@ export class GitOps {
    * patch with blob ids, so it can be applied elsewhere with a 3-way merge.
    */
   async patchContent(sha: string, removal: string): Promise<string> {
-    const index = await this.git.gitDirPath('codegit-patch-index');
-    const removalFile = await this.git.gitDirPath('codegit-patch.patch');
+    const index = await this.git.gitDirPath('slothgit-patch-index');
+    const removalFile = await this.git.gitDirPath('slothgit-patch.patch');
     fs.writeFileSync(removalFile, removal);
     // A scratch index, so the real one and the working tree are untouched.
     const env = { GIT_INDEX_FILE: index };
@@ -330,7 +331,7 @@ export class GitOps {
     const original = await headSha(this.git);
     await this.removePatchFromCommit(sha, removal, 'discard');
 
-    const patchFile = await this.git.gitDirPath('codegit-move.patch');
+    const patchFile = await this.git.gitDirPath('slothgit-move.patch');
     fs.writeFileSync(patchFile, forward);
     try {
       const newTarget = (await this.git.run(['rev-parse', `HEAD~${distance}`])).trim();
@@ -354,7 +355,7 @@ export class GitOps {
 
   /** Applies the changes `removal` takes out of commit `sha` to the working tree, or reverts them there with `reverse`. */
   async applyPatch(sha: string, removal: string, reverse: boolean): Promise<void> {
-    const patchFile = await this.git.gitDirPath('codegit-apply.patch');
+    const patchFile = await this.git.gitDirPath('slothgit-apply.patch');
     fs.writeFileSync(patchFile, await this.patchContent(sha, removal));
     const flags = reverse ? ['--reverse'] : [];
     try {
@@ -385,8 +386,8 @@ export class GitOps {
     patch: string,
     target: 'discard' | 'index' | { newCommit: string },
   ): Promise<string | void> {
-    const patchFile = await this.git.gitDirPath('codegit-patch.patch');
-    const restoreFile = await this.git.gitDirPath('codegit-uncommit.patch');
+    const patchFile = await this.git.gitDirPath('slothgit-patch.patch');
+    const restoreFile = await this.git.gitDirPath('slothgit-uncommit.patch');
     fs.writeFileSync(patchFile, patch);
     try {
       await this.atCommit(sha, async () => {
@@ -414,8 +415,10 @@ export class GitOps {
   // --- other commit operations ---------------------------------------------
 
   /** `shas` in the order they should be applied (oldest first). */
+  /** Applies oldest first, whatever order the commits were copied in; newest first would conflict with itself. */
   async cherryPick(shas: string[]): Promise<void> {
-    await this.git.exec(['cherry-pick', ...shas]);
+    const ordered = shas.length > 1 ? (await this.git.run(['rev-list', '--no-walk=sorted', '--reverse', ...shas])).split(/\r?\n/).filter(Boolean) : shas;
+    await this.git.exec(['cherry-pick', ...ordered]);
   }
 
   /** `mainline` is the parent (1-based) a merge commit is reverted against, the side whose changes are kept. */
@@ -443,9 +446,8 @@ export class GitOps {
    * changes come along. Returns the number of commits moved.
    */
   async moveCommitsToNewBranch(name: string): Promise<number> {
-    const branch = await this.git.exec(['symbolic-ref', '--short', '-q', 'HEAD'], { allowedExitCodes: [1] });
-    if (branch.exitCode !== 0) throw new UserError('HEAD is detached. Check out the branch the commits were made on.');
-    const current = branch.stdout.trim();
+    const current = await currentBranch(this.git);
+    if (!current) throw new UserError('HEAD is detached. Check out the branch the commits were made on.');
     const upstream = await this.git.exec(['rev-parse', '--verify', '-q', '@{upstream}'], { allowedExitCodes: [1, 128] });
     if (upstream.exitCode !== 0) {
       throw new UserError(`${current} has no upstream, so there is nothing to put it back to. Create a branch here and reset ${current} instead.`);
@@ -578,7 +580,7 @@ export class GitOps {
       return;
     }
     const stash = await isDirty(this.git);
-    if (stash) await this.git.exec(['stash', 'push', '--include-untracked', '-m', `codegit: autostash for ${direction}`]);
+    if (stash) await this.git.exec(['stash', 'push', '--include-untracked', '-m', `slothgit: autostash for ${direction}`]);
     try {
       await this.git.exec(['reset', '--hard', target], { env });
     } finally {

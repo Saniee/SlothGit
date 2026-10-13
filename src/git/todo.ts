@@ -70,7 +70,7 @@ export function parseTodo(todo: string): TodoEntry[] {
 }
 
 /** Kept next to git-rebase-todo, so git deletes it when the rebase ends: full SHA -> message for its reword step. */
-export const REWORD_MESSAGES_FILE = 'codegit-messages.json';
+export const REWORD_MESSAGES_FILE = 'slothgit-messages.json';
 
 /**
  * The saved message for the step git is applying now, when that is a reword. `done` is rebase-merge/done,

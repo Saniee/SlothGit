@@ -1,16 +1,16 @@
 // Test harness for the end-to-end run inside VS Code: scripted answers for prompts, repository snapshots,
-// and lookups for CodeGit's tree nodes.
+// and lookups for SlothGit's tree nodes.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { CodeGitTestApi } from '../../src/extension';
+import type { SlothGitTestApi } from '../../src/extension';
 import type { CommitNode, FileNode, Node, RefNode, RemoteNode, SectionNode, StashNode, TodoNode, WorktreeNode } from '../../src/views/nodes';
 
 // --- scripted prompts ---------------------------------------------------------------------
 
-/** One answer to the next prompt CodeGit shows. `expect` is matched against the prompt's title or message. */
+/** One answer to the next prompt SlothGit shows. `expect` is matched against the prompt's title or message. */
 export type Answer =
   | { pick: string | string[]; expect?: RegExp }
   | { input: string; expect?: RegExp }
@@ -178,7 +178,7 @@ export class Context {
   baselineStatus = '';
 
   constructor(
-    readonly api: CodeGitTestApi,
+    readonly api: SlothGitTestApi,
     readonly playground: string,
     private readonly gitRepo: { status(): Promise<void> },
   ) {
@@ -194,22 +194,22 @@ export class Context {
     this.baselineStatus = this.status();
   }
 
-  /** Puts the playground back exactly as the snapshot, including CodeGit's in-memory state. */
+  /** Puts the playground back exactly as the snapshot, including SlothGit's in-memory state. */
   async restore(): Promise<void> {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
     for (const id of [
-      'codegit.commits.clearFilter',
-      'codegit.commits.clearSearch',
-      'codegit.commits.showCurrentBranch',
-      'codegit.commit.clearBase',
-      'codegit.compare.clear',
-      'codegit.commit.clearCherryPick',
-      'codegit.patch.reset',
+      'slothgit.commits.clearFilter',
+      'slothgit.commits.clearSearch',
+      'slothgit.commits.showCurrentBranch',
+      'slothgit.commit.clearBase',
+      'slothgit.compare.clear',
+      'slothgit.commit.clearCherryPick',
+      'slothgit.patch.reset',
     ]) {
       await vscode.commands.executeCommand(id);
     }
-    const settings = vscode.workspace.getConfiguration('codegit');
-    for (const key of ['branchSort', 'updateStackedBranches']) {
+    const settings = vscode.workspace.getConfiguration('slothgit');
+    for (const key of ['branchSort', 'updateStackedBranches', 'simpleMode']) {
       // Only when set: changing settings reloads every view.
       if (settings.inspect(key)?.globalValue !== undefined) await settings.update(key, undefined, vscode.ConfigurationTarget.Global);
     }
@@ -251,7 +251,7 @@ export class Context {
   }
   operationInProgress(): boolean {
     const gitDir = path.join(this.repo, '.git');
-    return ['rebase-merge', 'rebase-apply', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD'].some((f) => fs.existsSync(path.join(gitDir, f)));
+    return ['rebase-merge', 'rebase-apply', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'sequencer'].some((f) => fs.existsSync(path.join(gitDir, f)));
   }
   /** Discards the playground's uncommitted changes, for scenarios that switch branches. */
   async cleanTree(): Promise<void> {
@@ -268,7 +268,7 @@ export class Context {
     this.sh('clean', '-qfd');
   }
 
-  // --- CodeGit ---
+  // --- SlothGit ---
 
   async refresh(): Promise<void> {
     await this.gitRepo.status().catch(() => undefined);
@@ -347,6 +347,10 @@ export class Context {
     return found;
   }
 
+  /** The Branches view's sections, in order. */
+  async sectionNames(): Promise<string[]> {
+    return (await this.roots('branches')).flatMap((n) => (n.kind === 'section' ? [n.section] : []));
+  }
   private async section(section: SectionNode['section']): Promise<SectionNode> {
     const found = (await this.roots('branches')).find((n): n is SectionNode => n.kind === 'section' && n.section === section);
     assert.ok(found, `${section} section in the Branches view`);

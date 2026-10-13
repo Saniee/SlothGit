@@ -25,7 +25,7 @@ const templates = new Map<string, string>();
 export function newRepo(key: string, build: (dir: string) => void = () => {}): string {
   let template = templates.get(key);
   if (!template) {
-    template = fs.mkdtempSync(path.join(os.tmpdir(), 'codegit-template-'));
+    template = fs.mkdtempSync(path.join(os.tmpdir(), 'slothgit-template-'));
     git(template, 'init', '-q', '-b', 'main');
     for (const [name, value] of [
       ['user.name', 'Test'],
@@ -43,7 +43,7 @@ export function newRepo(key: string, build: (dir: string) => void = () => {}): s
     build(template);
     templates.set(key, template);
   }
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegit-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slothgit-'));
   // Same timestamps, so git's index still matches the files and doesn't re-read them all.
   fs.cpSync(template, dir, { recursive: true, preserveTimestamps: true });
   return dir;

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { GitOps, UserError, type ResetMode } from './git/operations';
 import { getOperation, type Operation } from './git/queries';
+import { branchNameError } from './git/refName';
 import { GitError } from './git/runner';
 import type { RepoManager } from './repoManager';
 import type { Repository } from './types/git';
@@ -33,11 +34,11 @@ export function createRunner(
     const ops = repos.ops();
     const repo = repos.repository;
     if (!ops || !repo) {
-      void vscode.window.showWarningMessage('CodeGit: no Git repository is open.');
+      void vscode.window.showWarningMessage('SlothGit: no Git repository is open.');
       return false;
     }
     if (busy) {
-      void vscode.window.showInformationMessage('CodeGit: another operation is still running.');
+      void vscode.window.showInformationMessage('SlothGit: another operation is still running.');
       return false;
     }
     busy = true;
@@ -78,12 +79,12 @@ export function createRunner(
         'Abort',
         'Open Source Control',
       );
-      if (choice === 'Continue') await vscode.commands.executeCommand('codegit.operation.continue');
-      else if (choice === 'Abort') await vscode.commands.executeCommand('codegit.operation.abort');
+      if (choice === 'Continue') await vscode.commands.executeCommand('slothgit.operation.continue');
+      else if (choice === 'Abort') await vscode.commands.executeCommand('slothgit.operation.abort');
       else if (choice === 'Open Source Control') await vscode.commands.executeCommand('workbench.view.scm');
       return;
     }
-    const choice = await vscode.window.showErrorMessage(`CodeGit: ${firstLines(message)}`, 'Show Log');
+    const choice = await vscode.window.showErrorMessage(`SlothGit: ${firstLines(message)}`, 'Show Log');
     if (choice) output.show();
   }
 
@@ -109,7 +110,7 @@ export function createRunner(
         title,
         value,
         placeHolder: 'Branch name',
-        validateInput: (v) => (/^\S+$/.test(v) ? undefined : 'Enter a branch name without spaces.'),
+        validateInput: branchNameError,
       }),
     );
   }
@@ -127,10 +128,10 @@ const DONE_MESSAGE_MS = 4000;
  */
 function withFeedback<T>(title: string, fn: () => Promise<T>): Promise<T> {
   const task = Promise.resolve(vscode.window.withProgress({ location: vscode.ProgressLocation.SourceControl, title }, () =>
-    vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: `CodeGit: ${title}` }, fn),
+    vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: `SlothGit: ${title}` }, fn),
   ));
   const timer = setTimeout(() => {
-    void vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `CodeGit: ${title}` }, () =>
+    void vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `SlothGit: ${title}` }, () =>
       task.catch(() => undefined),
     );
   }, NOTIFY_AFTER_MS);
@@ -139,7 +140,7 @@ function withFeedback<T>(title: string, fn: () => Promise<T>): Promise<T> {
 
 /** "Pushing main…" → "Pushing main: done". */
 export function doneMessage(title: string): string {
-  return `CodeGit: ${title.replace(/…$/, '')}: done`;
+  return `SlothGit: ${title.replace(/…$/, '')}: done`;
 }
 
 /** Errors from the built-in Git extension carry git's output in `stderr`, with a generic `message`. */

@@ -1,152 +1,84 @@
-# CodeGit
+# SlothGit
 
-Lazygit-inspired power tools that fill the gaps in VS Code's built-in Git support. CodeGit adds four views to the Source Control sidebar (Branches, Commits, Reflog and Stashes, in lazygit's order) and builds on the built-in Git extension (same repositories, same diff editors) rather than replacing it. File staging stays with VS Code's own Changes view.
+Lazygit-inspired power tools that fill the gaps in VS Code's built-in Git support. SlothGit adds four views to the Source Control sidebar (Branches, Commits, Reflog and Stashes, in lazygit's order) and builds on the built-in Git extension (same repositories, same diff editors) rather than replacing it. File staging stays with VS Code's own Changes view.
+
+## Getting started
+
+Open **Get Started with SlothGit** on VS Code's Welcome page, or **Learn Git Concepts…** in any SlothGit view's **…** menu. It explains what each view shows and, in plain language, what squash, fixup, rebase, cherry-pick, stashes, worktrees and bisect are for.
+
+**Right-click** anything in the views to see what you can do with it. New to Git? The eye button on the Source Control **Changes** title bar turns on **Simple Mode**, which hides the advanced actions until you press it again.
 
 ## Features
 
-### Replaces the Graph view
-The Commits view does what VS Code's built-in **Graph** view does, and more, so CodeGit hides the Graph the first time you open Source Control. To bring it back, use the **…** menu on the Source Control sidebar and tick **Graph**. CodeGit won't hide it again.
+- **Undo / redo** (↶ / ↷ on the Commits view) for commits, amends, resets, rebases, merges, cherry-picks and checkouts, like lazygit's `z` / `Z`. It works from the reflog, so it covers actions run outside SlothGit too.
+- **Branches:** local branches (current first, then most recently used) with ahead/behind counts, remotes, tags and worktrees in one tree. Checkout, merge, rebase (whole branch, from a marked base, or interactive), fast-forward without checking out, push / force push with lease, upstreams, pull requests, delete merged branches, and moving commits made on the wrong branch to a new one.
+- **Commits:** rewrite history from the commit list: squash, fixup, drop, reword, edit, move up / down, amend staged changes into an older commit, fixup commits and autosquash, amend author and co-authors, cherry-pick, revert, reset. Works across merge commits (`--rebase-merges`) and can move stacked branches along (`slothgit.updateStackedBranches`).
+- **Patches:** remove or move a file's changes, or selected lines in a commit's diff, out of a commit, to the index or a new commit. Collect several into a custom patch (status bar) and move it into any other commit.
+- **Paused rebases:** the remaining steps are listed at the top of the Commits view. Right-click to change them (pick, reword, squash, fixup, edit, drop), reorder with ↑ / ↓, then Continue, Skip or Abort from the title bar or status bar.
+- **Commit colours** as in lazygit: green when on the main branch (`slothgit.mainBranches`), yellow when pushed, red when not. Rewriting pushed commits asks first.
+- **Commit Graph:** history as a graph in an editor tab, with branch lanes, labels, search, details and the same right-click actions.
+- **Search, filter by file, all branches, bisect and compare** in the Commits view.
+- **Stashes:** apply, pop, drop, rename, branch from a stash; stash untracked or only staged changes.
+- **Reflog:** recover dropped commits or undo resets from any entry.
+- **Sync view:** the current branch, its upstream and ↑↓ counts, with Pull and Push buttons. Like the Commit button, each has a ⌄ (also on right-click) with Pull (Rebase), Fetch and Fetch All Remotes; Force Push, Push to Another Branch and Set Upstream. Drag it above **Changes** to keep it next to the commit box.
 
-### Fetch / Pull / Push on the Changes view
-The Source Control **Changes** title bar gets Fetch, Pull and Push buttons, like the ones on the Graph view. They run the built-in Git commands for that repository. Turn them off with `codegit.showSyncButtons`.
+The Commits view covers what VS Code's built-in **Graph** view does, so SlothGit hides the Graph once. Tick **Graph** in the Source Control **…** menu to bring it back.
 
-### Undo / redo
-The ↶ / ↷ buttons on the Commits view undo and redo your last Git action, like lazygit's `z` / `Z`. That includes commits, amends, resets, rebases (as one step), merges, cherry-picks and checkouts. It works from the reflog, so it also covers actions you ran outside CodeGit. Uncommitted changes are carried across.
+## Settings
 
-### Branches view
-lazygit's branches panel, as one tree with four sections:
+| Setting | Default | |
+| --- | --- | --- |
+| `slothgit.simpleMode` | `false` | Hide advanced actions from the menus |
+| `slothgit.branchSort` | `recency` | Order of local branches: `recency`, `date` or `name` |
+| `slothgit.mainBranches` | `main`, `master` | Branches whose commits are shown green |
+| `slothgit.confirmRewritingPushedCommits` | `true` | Ask before rewriting pushed commits |
+| `slothgit.updateStackedBranches` | `gitConfig` | Move stacked branches along when rewriting (`always`, `never`, or git's `rebase.updateRefs`) |
+| `slothgit.commitLimit` / `slothgit.reflogLimit` | `300` / `200` | How many entries the views load |
 
-- **Local Branches.** The current branch comes first, then the rest sorted by most recent checkout (or by latest commit or name: **Sort Branches…**). Each branch shows ahead/behind counts against its upstream (or "upstream gone"), and branches checked out in another worktree are marked. Actions:
-  - checkout, checkout previous branch, new branch, new worktree, rename
-  - delete (local, remote or both; unmerged branches ask before force-deleting), delete merged branches in bulk
-  - merge into current (regular, `--no-ff` or squash), rebase current onto this
-  - fast-forward from upstream (works without checking the branch out), push / force push with lease, set or unset upstream
-  - move unpushed commits to a new branch, for commits made on the wrong branch: the new branch gets them, and the current branch goes back to its upstream
-  - create pull request (GitHub, GitLab, Bitbucket, Azure DevOps, Gitea), reset current branch to this, compare with current
-- **Remotes.** Each remote expands to its branches. Actions: fetch (one remote or all), add, rename, edit URL and remove. Remote branches can be checked out as a tracking branch, merged, rebased onto, set as the current branch's upstream, or deleted on the remote.
-- **Tags.** Create (lightweight or annotated, at HEAD or at any commit), push to a remote, delete locally or also on a remote, check out, and reset to.
-- **Worktrees.** Add one (for an existing branch or a new one), open it in a new or the current window, copy its path, remove it (asks before discarding changes), and prune missing ones.
-
-Expand any branch or tag to browse its commits and their files. From there you can copy commits for cherry-picking, check them out, branch from them and so on.
-
-Push, fetch and remote deletes go through VS Code's built-in Git extension, so its credential prompts and `git.pruneOnFetch` apply.
-
-#### Rebasing onto another branch
-- **Whole branch:** right-click the target branch (e.g. `origin/main`) and pick **Rebase Current Branch onto This**.
-- **Only your commits** (your branch was cut from another feature branch): in the Commits view, right-click the last commit that is *not* yours and pick **More Rewrite Actions → Mark as Base Commit for Rebase**. Then run **Rebase Current Branch onto This** on the target and choose **Rebase from Marked Base**. This is `git rebase --onto <target> <base>`.
-
-- **Interactive:** pick **Interactive Rebase** (or **Interactive Rebase from Marked Base**). The rebase pauses before the first commit is applied and lists the steps at the top of the Commits view (see **Paused rebases** below). Reorder them, or change each to pick, reword, squash, fixup, edit or drop, then **Continue**. **Abort** leaves the branch as it was.
-
-CodeGit warns before rebasing commits that are already pushed. Conflicts are handled the same way as for other rewrites (see below).
-
-### Commits view
-Rewrite history straight from the commit list, with no todo file to edit by hand:
-
-| Action | Notes |
-| --- | --- |
-| Squash / fixup into previous commit | Squash combines the messages; fixup keeps the older one |
-| Drop commit | Works on multiple selected commits |
-| Reword commit | Quick subject edit, or **More Rewrite Actions → Reword Commit in Editor** for the full multi-line message |
-| Edit commit (pause rebase) | Stage changes, then **Continue** amends it |
-| Amend staged changes into commit | Folds staged changes into any older commit; unstaged changes are preserved |
-| Create fixup commit / squash fixup commits above | `git commit --fixup` and `--autosquash` (lazygit `F` / `S`) |
-| Amend author | Reset author, set author, or add or remove a `Co-authored-by` trailer |
-| Move commit up / down | |
-| Copy / paste for cherry-pick | Copy on one branch, paste on another |
-| Reset to here (soft / mixed / hard), create branch or tag here, checkout, revert | |
-| Copy… / open in browser | Copy the SHA, subject, message, author, diff or web URL |
-
-Expand a commit to see its files. For each file you can open the diff or the file at that revision, or check the file out from that commit. You can also **remove its changes from the commit**, or **move them out of the commit into the index**, which is lazygit's custom-patch "move patch out" at file level. Use **Open All Changes** to see a whole commit in the multi-diff editor.
-
-**Line-level patches:** in a commit's file diff (opened from the Commits view, including **Open All Changes**), select changed lines on either side and right-click:
-
-- **Remove Selected Changes from Commit** discards them from the commit.
-- **Move Selected Changes out of Commit (to Index)** takes them out and stages them in your working tree.
-- **Move Selected Changes to New Commit** splits them into a new commit right after the original.
-
-With no selection, the change under the cursor is used. As with VS Code's **Stage Selected Ranges**, selecting some lines of a changed block also takes the lines they replaced. Later commits that touch the same lines may conflict; Continue / Abort work as for other rewrites.
-
-**Custom patch:** to collect changes from several files or selections of one commit first, use **Add Selected Changes to Custom Patch** in its file diffs, or **Add to Custom Patch** on a file in the Commits view. The status bar shows the patch; click it to:
-
-- remove it from the commit, move it out to the index, or move it to a new commit;
-- move it into another commit, older or newer (also **Move Custom Patch into This Commit** on a commit). If it doesn't apply there, nothing is changed;
-- apply it to the working tree, or apply it in reverse, without changing history;
-- show it, or reset it.
-
-**Merge commits:** rewrites work across merges. When the commits being rewritten include merges, CodeGit rebases with `--rebase-merges`, so the merges are recreated and the branch structure stays the same. A recreated merge is merged again, so conflicts that were resolved in it come back, and changes made by hand in the merge itself are lost. Changes that would break the structure are refused before anything happens: squashing a commit into one on another branch, or moving a commit past a merge. A merge commit itself can be reworded, edited (including amending its author) or dropped; dropping it takes the merged branch's commits out of this branch's history. It can't be squashed, fixed up or moved. **Revert** on a merge commit asks which parent's side to keep (`git revert -m`). During a paused rebase, merge steps are listed with the other steps but can't be changed.
-
-**Stacked branches:** with `codegit.updateStackedBranches` set to `always` (or git's `rebase.updateRefs` turned on, which the default setting follows), rewriting history also moves other local branches that point at the rewritten commits, like lazygit. That keeps a branch stacked on another one stacked after you change the lower one. A paused rebase lists these branch updates with the other steps, and moving a commit across one moves the commit into that branch. Branches checked out in another worktree are left alone, and undo only moves the current branch back.
-
-After a rewrite the cursor stays on the commit you acted on (it follows a moved commit), so you can repeat an action without looking for the commit again.
-
-Commit icons are coloured as in lazygit: green when the commit is already on the main branch, yellow when it is pushed to the upstream branch, and red when it isn't pushed yet. The main branches are set with `codegit.mainBranches` (default `main` and `master`); a main branch counts by its upstream when it has one, so on `main` itself pushed commits are green. CodeGit asks for confirmation before rewriting pushed commits, including commits already on the main branch.
-
-All rewrites use `git rebase --interactive --autostash`, so a dirty working tree is fine. When a rebase stops (on conflicts, or at a commit you chose to edit), the status bar and the view toolbar offer **Continue / Skip / Abort**. **Paused rebases:** the steps still to apply are listed in orange at the top of the Commits view, newest at the top, so they run from the bottom up. Each reads like a line of git's todo file, action first (`pick  Add search`).
-
-| To | Do |
-| --- | --- |
-| Change what happens to a commit | Right-click the step: **Pick**, **Reword…**, **Squash into Step Below**, **Fixup into Step Below**, **Edit (Stop Here)** or **Drop**. Select several steps to change them together |
-| Reorder | The ↑ / ↓ buttons on the step |
-| Go on | **Continue** (▷) on the view's title bar |
-| Leave out the commit that conflicted | **Skip** on the title bar |
-| Undo the whole rebase | **Abort** (■) |
-
-Squash and fixup meld a commit into the step below it, the older commit. Reword asks for the new message right away and applies it when the rebase gets to that commit.
-
-Each commit shows its SHA, author initials and message, as in lazygit, followed by its relative date, branches and tags. Co-authors (`Co-authored-by` trailers) are added to the initials, e.g. `AL+GH`, and listed in the tooltip and the Commit Graph. In a narrow view only the end of the message is cut off; the tooltip has the full message, author, co-authors, date and email. Merge commits get a merge icon.
-
-**Search:** the search button matches text in the message or author name (case-insensitive), or a SHA prefix. Squash and move are disabled while searching, since the neighbouring commits are hidden.
-
-**All branches:** **Show All Branches** in the view's **…** menu lists every branch, remote branch and tag together. Other branches' commits are dimmed; you can check them out, branch from them or cherry-pick them, but not rewrite them.
-
-**Commit Graph ("pretty mode"):** the graph button opens the history as a graph in an editor tab: branch lanes, branch and tag labels, author and date columns, search and an all-branches switch. Click a commit for its message and files (click a file for its diff), double-click to open all its changes, and right-click for the same actions as the Commits view.
-
-**Filter by file:** **Filter Commits by File…** in the Commits view's **…** menu, or **Show File History in CodeGit** in the Explorer or an editor tab's context menu, limits the log to commits touching that file or folder.
-
-**Bisect:** right-click commits and use the **Bisect** submenu to mark them bad, good or skipped. CodeGit starts the bisect if needed, marks the commits in the list, and offers to reset once git names the first bad commit.
-
-**Compare:** **Select for Compare** on any commit, branch or tag, then **Compare with Selected** on another. This is lazygit's diffing mode, shown in the multi-diff editor.
-
-### Stashes view
-List stashes and browse their files, including untracked ones. You can apply, pop, drop or rename a stash, or create a branch from it. New stashes can include untracked files, contain only staged changes, or leave the staged changes in place.
-
-### Reflog view
-Browse `HEAD`'s reflog to recover dropped commits or undo resets. From any entry you can check it out, reset to it, branch from it, or copy it for cherry-picking.
+SlothGit was called CodeGit before 1.0.0. `codegit.*` settings are copied over on first start.
 
 ## How it works
 
-The extension calls the git CLI (the binary the built-in Git extension uses). For interactive rebases, git runs `dist/rebaseEditor.js` as `GIT_SEQUENCE_EDITOR`/`GIT_EDITOR`; VS Code's own runtime executes it via `ELECTRON_RUN_AS_NODE`. The script rewrites the todo list according to a plan passed in an environment variable. If anything doesn't match, it exits non-zero and git aborts the rebase before touching history.
+SlothGit calls the git CLI that the built-in Git extension uses. Every rewrite is a `git rebase --interactive --autostash`. Git runs `dist/rebaseEditor.js` as the sequence editor, and it rewrites the todo list from a plan. If anything doesn't match the plan, it exits non-zero and git aborts before touching history. Undo replays the HEAD reflog as a stack of actions.
 
-Undo/redo replays the HEAD reflog as a stack of actions. CodeGit's own undo and redo steps are recorded with `GIT_REFLOG_ACTION` markers, so later replays know what is already undone.
+The Commit Graph and the Sync view are webview pages. Each lives in `src/webview/<page>/` as markup (`body.html`), styles (`style.css`) and a script (`main.ts`, type-checked against the DOM by `src/webview/tsconfig.json`). esbuild bundles them into `dist/webview/`. The messages between a page and the extension are typed in `src/webview/messages.ts`, which both sides import.
 
 ## Development
 
 ```bash
 npm install
-npm test          # builds, then runs unit tests plus real-git integration tests
-npm run playground  # builds ../codegit-playground: a repo with a scenario for every feature (see TESTING.md)
-npm run smoke     # opens your installed VS Code with a throwaway profile and walks every view in a scratch repo
-npm run e2e       # runs every TESTING.md item against the playground in VS Code (~4 min; `npm run e2e -- stash` for a subset)
-npm run watch     # rebuild on change
+npm test            # unit tests plus real-git integration tests
+npm run e2e         # every TESTING.md item against a playground in VS Code (`npm run e2e -- stash` for a subset)
+npm run playground  # builds ../slothgit-playground for trying things by hand (see TESTING.md)
+npm run watch       # rebuild on change
 ```
 
 Press `F5` to launch an Extension Development Host.
 
 ### Releases
 
-Pushing a version tag builds the extension, runs the tests and attaches the `.vsix` to a GitHub Release (see `.github/workflows/release.yml`). Nothing is published to the Marketplace.
+Pushing a version tag (matching `version` in `package.json`, with or without a leading `v`) builds the extension, runs the tests and attaches the `.vsix` to a GitHub Release. The release notes are that version's section of [CHANGELOG.md](CHANGELOG.md). Tags with a suffix, such as `1.1.0-beta.1`, become pre-releases.
 
 ```bash
-git tag 0.3.0
+git tag 1.0.0
 ```
 
 ```bash
-git push origin 0.3.0
+git push origin 1.0.0
 ```
 
-The tag must match `version` in `package.json`, with or without a `v` in front. Tags with a suffix, such as `0.3.0-beta.1`, become pre-releases. The release notes are that version's section of [CHANGELOG.md](CHANGELOG.md) (a `## 0.3.0` heading), so add it before tagging. Install a release with **Extensions: Install from VSIX…**.
+To publish to [Open VSX](https://open-vsx.org) by hand, create an access token in your Open VSX settings and create the `Saniee` namespace once (`npx ovsx create-namespace Saniee -p <token>`). Then run:
 
-## Roadmap ideas
+```bash
+OVSX_PAT=<token> npm run publish:ovsx
+```
 
+The release workflow does the same automatically when the repository has an `OVSX_PAT` secret.
+
+## Roadmap
+
+- Visual interactive rebase editor, like GitLens's: drag commits to reorder them, mark them to squash, reword or drop, see ahead of time which steps will conflict, and resolve every conflicted file from one panel [[feature/actually-interactive-rebase]](https://github.com/Saniee/SlothGit/tree/feature/actually-interactive-rebase)
 - Submodules
 - Custom commands (lazygit's `customCommands`)
+- Git blame [[feature/git-blame]](https://github.com/Saniee/SlothGit/tree/feature/git-blame)
+- Issues and pull requests dashboard[[feature/issues-pullrequest-dashboard]](https://github.com/Saniee/SlothGit/tree/feature/issues-pullrequest-dashboard)

@@ -86,7 +86,7 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
     });
     if (!ok) return;
     if (/is the first/.test(summary)) {
-      const choice = await vscode.window.showInformationMessage(summary, 'Reset Bisect');
+      const choice = await vscode.window.showInformationMessage(summary, 'Stop Bisecting');
       if (choice) await run('Resetting bisect…', (ops) => ops.bisectReset());
     } else if (summary) {
       void vscode.window.showInformationMessage(`${summary} Test the checked-out commit, then mark it.`);
@@ -158,24 +158,24 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
   // --- commands ------------------------------------------------------------------------
 
   const commands: Record<string, (...args: any[]) => unknown> = {
-    'codegit.undo': () => undoRedo('undo'),
-    'codegit.redo': () => undoRedo('redo'),
+    'slothgit.undo': () => undoRedo('undo'),
+    'slothgit.redo': () => undoRedo('redo'),
 
-    'codegit.bisect.markBad': (arg?: Node) => bisect('bad', arg),
-    'codegit.bisect.markGood': (arg?: Node) => bisect('good', arg),
-    'codegit.bisect.skip': (arg?: Node) => bisect('skip', arg),
-    'codegit.bisect.reset': () => run('Resetting bisect…', (ops) => ops.bisectReset()),
+    'slothgit.bisect.markBad': (arg?: Node) => bisect('bad', arg),
+    'slothgit.bisect.markGood': (arg?: Node) => bisect('good', arg),
+    'slothgit.bisect.skip': (arg?: Node) => bisect('skip', arg),
+    'slothgit.bisect.reset': () => run('Resetting bisect…', (ops) => ops.bisectReset()),
 
-    'codegit.compare.select': (arg?: Node) => {
+    'slothgit.compare.select': (arg?: Node) => {
       compareBase = revisionOf(arg ?? commitsView.selection[0]);
-      void vscode.commands.executeCommand('setContext', 'codegit.hasCompareBase', !!compareBase);
+      void vscode.commands.executeCommand('setContext', 'slothgit.hasCompareBase', !!compareBase);
       if (compareBase) {
         void vscode.window.showInformationMessage(
           `Selected ${compareBase.label} for comparison. Pick another commit or branch and choose "Compare with Selected".`,
         );
       }
     },
-    'codegit.compare.withSelected': async (arg?: Node) => {
+    'slothgit.compare.withSelected': async (arg?: Node) => {
       const other = revisionOf(arg ?? commitsView.selection[0]);
       const git = repos.git();
       if (!compareBase || !other || !git) return;
@@ -184,12 +184,12 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
       const files: FileNode[] = pairs.map((pair) => ({ kind: 'file', pair, label: title }));
       await openMultiDiff(repos, title, files);
     },
-    'codegit.compare.clear': () => {
+    'slothgit.compare.clear': () => {
       compareBase = undefined;
-      void vscode.commands.executeCommand('setContext', 'codegit.hasCompareBase', false);
+      void vscode.commands.executeCommand('setContext', 'slothgit.hasCompareBase', false);
     },
 
-    'codegit.commits.filterByFile': async () => {
+    'slothgit.commits.filterByFile': async () => {
       const root = repos.repository?.rootUri;
       if (!root) return;
       const active = vscode.window.activeTextEditor?.document.uri;
@@ -205,9 +205,9 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
         const chosen = await vscode.window.showOpenDialog({ defaultUri: root, canSelectFolders: true, canSelectFiles: true });
         uri = chosen?.[0];
       }
-      if (uri) await vscode.commands.executeCommand('codegit.commits.showFileHistory', uri);
+      if (uri) await vscode.commands.executeCommand('slothgit.commits.showFileHistory', uri);
     },
-    'codegit.commits.showFileHistory': async (uri?: vscode.Uri) => {
+    'slothgit.commits.showFileHistory': async (uri?: vscode.Uri) => {
       const target = uri ?? vscode.window.activeTextEditor?.document.uri;
       const repo = target && repos.api.getRepository(target);
       const root = repo?.rootUri;
@@ -220,11 +220,11 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
         ? target.fsPath.slice(root.fsPath.length + 1).replace(/\\/g, '/')
         : relative;
       await setView({ filterPath: rel || '.' });
-      await vscode.commands.executeCommand('codegit.commits.focus');
+      await vscode.commands.executeCommand('slothgit.commits.focus');
     },
-    'codegit.commits.clearFilter': () => setView({ filterPath: undefined }),
+    'slothgit.commits.clearFilter': () => setView({ filterPath: undefined }),
 
-    'codegit.commits.search': async () => {
+    'slothgit.commits.search': async () => {
       const query = await vscode.window.showInputBox({
         title: 'Search commits',
         value: commits.search,
@@ -233,21 +233,21 @@ export function registerHistoryCommands(deps: HistoryCommandDeps): vscode.Dispos
       });
       if (query === undefined) return;
       await setView({ search: query.trim() || undefined });
-      await vscode.commands.executeCommand('codegit.commits.focus');
+      await vscode.commands.executeCommand('slothgit.commits.focus');
     },
-    'codegit.commits.clearSearch': () => setView({ search: undefined }),
-    'codegit.commits.showAllBranches': () => setView({ allBranches: true }),
-    'codegit.commits.showCurrentBranch': () => setView({ allBranches: false }),
+    'slothgit.commits.clearSearch': () => setView({ search: undefined }),
+    'slothgit.commits.showAllBranches': () => setView({ allBranches: true }),
+    'slothgit.commits.showCurrentBranch': () => setView({ allBranches: false }),
 
-    'codegit.todo.moveUp': (arg?: Node) => editTodo(arg, (node) => ({ move: { sha: node.sha, direction: 'up' } })),
-    'codegit.todo.moveDown': (arg?: Node) => editTodo(arg, (node) => ({ move: { sha: node.sha, direction: 'down' } })),
-    'codegit.todo.pick': (arg?: Node, all?: Node[]) => setTodoAction('pick', arg, all),
-    'codegit.todo.reword': (arg?: Node, all?: Node[]) => setTodoAction('reword', arg, all),
-    'codegit.todo.squash': (arg?: Node, all?: Node[]) => setTodoAction('squash', arg, all),
-    'codegit.todo.fixup': (arg?: Node, all?: Node[]) => setTodoAction('fixup', arg, all),
-    'codegit.todo.edit': (arg?: Node, all?: Node[]) => setTodoAction('edit', arg, all),
-    'codegit.todo.drop': (arg?: Node, all?: Node[]) => setTodoAction('drop', arg, all),
-    'codegit.todo.setAction': async (arg?: Node) => {
+    'slothgit.todo.moveUp': (arg?: Node) => editTodo(arg, (node) => ({ move: { sha: node.sha, direction: 'up' } })),
+    'slothgit.todo.moveDown': (arg?: Node) => editTodo(arg, (node) => ({ move: { sha: node.sha, direction: 'down' } })),
+    'slothgit.todo.pick': (arg?: Node, all?: Node[]) => setTodoAction('pick', arg, all),
+    'slothgit.todo.reword': (arg?: Node, all?: Node[]) => setTodoAction('reword', arg, all),
+    'slothgit.todo.squash': (arg?: Node, all?: Node[]) => setTodoAction('squash', arg, all),
+    'slothgit.todo.fixup': (arg?: Node, all?: Node[]) => setTodoAction('fixup', arg, all),
+    'slothgit.todo.edit': (arg?: Node, all?: Node[]) => setTodoAction('edit', arg, all),
+    'slothgit.todo.drop': (arg?: Node, all?: Node[]) => setTodoAction('drop', arg, all),
+    'slothgit.todo.setAction': async (arg?: Node) => {
       const node = arg?.kind === 'todo' ? arg : (commitsView.selection.find((n) => n.kind === 'todo') as TodoNode | undefined);
       if (!node) return;
       const actions: { label: TodoAction; description: string }[] = [

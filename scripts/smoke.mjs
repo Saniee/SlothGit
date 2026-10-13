@@ -1,4 +1,4 @@
-// Launches the installed VS Code with CodeGit loaded from this folder, against a scratch repository,
+// Launches the installed VS Code with SlothGit loaded from this folder, against a scratch repository,
 // and runs test/smoke/index.ts inside it. Uses a throwaway profile, so your own settings are untouched.
 //
 //   npm run smoke                      (set CODE_PATH to override the VS Code executable)
@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import { build, root, runInVSCode } from './vscode-run.mjs';
 
 // --- scratch repository with something in every view ------------------------------------
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegit-smoke-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'slothgit-smoke-'));
 const repo = path.join(tmp, 'repo');
 const origin = path.join(tmp, 'origin.git');
 fs.mkdirSync(repo);

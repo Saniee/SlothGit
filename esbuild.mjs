@@ -13,7 +13,19 @@ const common = {
   sourcemap: !production,
   minify: production,
   logLevel: 'info',
+  // Webview page markup (src/webview/<page>/body.html) is inlined as a string.
+  loader: { '.html': 'text' },
 };
+
+// The webview pages run in a browser inside VS Code; each one's CSS is written next to its script.
+const pages = ['graph', 'sync'].map((page) => ({
+  ...common,
+  platform: 'browser',
+  format: 'iife',
+  target: 'es2022',
+  entryPoints: { [page]: `src/webview/${page}/main.ts` },
+  outdir: 'dist/webview',
+}));
 
 const builds = tests
   ? [
@@ -33,6 +45,7 @@ const builds = tests
       { ...common, entryPoints: ['src/extension.ts'], outfile: 'dist/extension.js', external: ['vscode'] },
       // Runs as GIT_SEQUENCE_EDITOR / GIT_EDITOR during rebases; must not depend on vscode.
       { ...common, entryPoints: ['src/rebaseEditor.ts'], outfile: 'dist/rebaseEditor.js' },
+      ...pages,
     ];
 
 if (watch) {

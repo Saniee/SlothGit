@@ -1,6 +1,6 @@
-# Manual testing
+# Testing
 
-Everything in the checklist below is also covered by `npm run e2e`. It opens a separate VS Code window on a fresh playground, runs each item with scripted answers to CodeGit's prompts, and checks the resulting git state. The window's status bar and the terminal show progress; the repository visibly resets between scenarios. Manual testing is still useful for what automation can't judge, such as layout, wording and how the workflow feels.
+**Status for 1.0.0: everything in the checklist below is tested and working.** Every item is covered by `npm run e2e`, which passes in full (126 scenarios), alongside the unit and integration tests (`npm test`). The e2e run opens a separate VS Code window on a fresh playground, runs each item with scripted answers to SlothGit's prompts, and checks the resulting git state. The window's status bar and the terminal show progress; the repository visibly resets between scenarios. Manual testing is still useful for what automation can't judge, such as layout, wording and how the workflow feels.
 
 ## Get a playground
 
@@ -8,7 +8,7 @@ Everything in the checklist below is also covered by `npm run e2e`. It opens a s
 npm run playground
 ```
 
-This creates `../codegit-playground/repo` (pass a folder to put it elsewhere: `npm run playground -- D:\tmp\pg`). Open that `repo` folder in VS Code with CodeGit installed. The remotes `origin` and `upstream` are bare repositories next to it, so pushing, fetching and deleting remote branches are safe and need no login.
+This creates `../slothgit-playground/repo` (pass a folder to put it elsewhere: `npm run playground -- D:\tmp\pg`). Open that `repo` folder in VS Code with SlothGit installed. The remotes `origin` and `upstream` are bare repositories next to it, so pushing, fetching and deleting remote branches are safe and need no login.
 
 Re-run the command whenever you want to start over. It replaces the previous playground (close VS Code windows on it first).
 
@@ -25,9 +25,9 @@ Re-run the command whenever you want to start over. It replaces the previous pla
 | "Add settings page" | Touches 2 files | Remove one file from the commit; move it to the index |
 | "Rename logout to signout" | Rename | File list and diff of a rename |
 | `feature/login` | Pushed, ahead 1 | Push, force push, create pull request (opens a URL; the remote is local, so expect nothing useful). Move Unpushed Commits to New Branch: the new branch gets "Login: error messages", `feature/login` matches `origin/feature/login` again |
-| `feature/login-ui` | Stacked on `feature/login` | Mark "Login: error messages" as base, then rebase onto `main` with the marked base, so only the 2 UI commits move. With `codegit.updateStackedBranches` set to `always`, reword a `feature/login` commit from here: `feature/login` moves too, and an interactive rebase lists "Update branch feature/login" |
+| `feature/login-ui` | Stacked on `feature/login` | Mark "Login: error messages" as base, then rebase onto `main` with the marked base, so only the 2 UI commits move. With `slothgit.updateStackedBranches` set to `always`, reword a `feature/login` commit from here: `feature/login` moves too, and an interactive rebase lists "Update branch feature/login" |
 | `conflict/status-line` | Edits the same line as `main` | Merge into `main`, or rebase it onto `main`, to get a conflict; Continue / Abort from the status bar |
-| `feature/search` | Has a `fixup!` commit | Squash Fixup Commits Above on "Add search"; Create Fixup Commit |
+| `feature/search` | Has a `fixup!` commit | Squash In Fixup Commits Above on "Add search"; Create Fixup Commit |
 | `feature/with-merge` | Contains a merge commit | Reword or drop "Side work" below the merge: the merge is recreated. Reword, drop and revert the merge itself (revert asks which parent to keep). Squashing or moving the merge, or squashing "Merged-in work", should refuse with a clear message |
 | `chore/gone-upstream` | Upstream deleted on remote | Shows "upstream gone"; Unset Upstream; Delete |
 | `origin/remote-only` | No local branch | Checkout creates a tracking branch |
@@ -39,52 +39,53 @@ Re-run the command whenever you want to start over. It replaces the previous pla
 
 ## Checklist
 
-Tick off what you tried and note anything odd, such as wrong labels, missing refreshes, confusing prompts or errors in **Output → CodeGit**.
+Ticked items are tested and working in 1.0.0. If you find something odd, such as a wrong label, a missing refresh, a confusing prompt or an error in **Output → SlothGit**, please open an issue.
 
 ### Branches view
-- [ ] Sort order: recency, date, name
-- [ ] Checkout, checkout previous, new branch, rename, delete (local / remote / both; unmerged asks to force)
-- [ ] Merge: regular, `--no-ff`, squash
-- [ ] Rebase onto, plain and with a marked base
-- [ ] Interactive rebase onto, plain and with a marked base: pauses first, change / reorder steps, Continue or Abort
-- [ ] Fast-forward, set / unset upstream, set remote branch as upstream
-- [ ] Push, force push with lease, fetch, fetch all
-- [ ] Compare with current, reset current to this, copy name
-- [ ] Remote: add, rename, edit URL, copy URL, remove
-- [ ] Tags: create (lightweight / annotated), push, delete
-- [ ] Worktrees: add (existing / new branch), open in new or current window, copy path, remove (dirty asks), prune
+- [x] Sort order: recency, date, name
+- [x] Checkout, checkout previous, new branch, rename, delete (local / remote / both; unmerged asks to force)
+- [x] Merge: regular, `--no-ff`, squash
+- [x] Rebase onto, plain and with a marked base; onto a branch already contained says there is nothing to rebase
+- [x] Interactive rebase onto, plain and with a marked base: pauses first, change / reorder steps, Continue or Abort
+- [x] Fast-forward, set / unset upstream, set remote branch as upstream
+- [x] Push, force push with lease, fetch, fetch all
+- [x] Compare with current, reset current to this, copy name
+- [x] Remote: add, rename, edit URL, copy URL, remove
+- [x] Tags: create (lightweight / annotated), push, delete
+- [x] Worktrees: add (existing / new branch), open in new or current window, copy path, remove (dirty asks), prune
 
 ### Commits view
-- [ ] Squash, fixup, drop (multi-select), reword, reword in editor, move up / down
-- [ ] The cursor stays on the commit after each of those (move up / down follows it)
-- [ ] Edit (pause), then change files, stage, Continue
-- [ ] Amend staged changes into an older commit
-- [ ] Create fixup commit, squash fixup commits above
-- [ ] Amend author (all three)
-- [ ] Cherry-pick copy on one branch, paste on another; clear
-- [ ] Reset soft / mixed / hard, checkout, revert, branch or tag here
-- [ ] Copy… (each item), open in browser
-- [ ] Commit files: open diff, open at revision, checkout file, remove from commit, move to index, Open All Changes
-- [ ] Line-level patches in a commit's diff (both sides, cursor only, several selections, Open All Changes): remove, move to index, move to new commit
-- [ ] Custom patch: add lines from two files of a commit (and a whole file from its context menu); from the status bar, move it into an older and a newer commit, apply it (and in reverse) to the working tree, show it, reset it. Adding from another commit asks to start over
-- [ ] Filter by file (toolbar, Explorer context menu, editor tab context menu), clear filter
-- [ ] Search by message, author and SHA; clear search
-- [ ] All branches: other branches' commits are dimmed and can't be rewritten
-- [ ] Commit Graph: lanes for `feature/with-merge` and all branches, labels, search, details pane, file diffs, double-click, right-click actions
-- [ ] Commit Graph next to GitLens's graph: what's missing or worse?
-- [ ] During a paused rebase: steps read `pick  subject`; right-click actions on one and several steps (including reword); reorder; Continue / Skip / Abort on the title bar
-- [ ] Bisect: bad / good / skip, marks shown, status bar, reset
-- [ ] Compare: select, compare with selected (commits, branches, tags mixed)
-- [ ] Undo / redo across: commit, amend, reset, rebase, checkout, merge
+- [x] Squash, fixup, drop (multi-select), reword, reword in editor, move up / down
+- [x] The cursor stays on the commit after each of those (move up / down follows it)
+- [x] Edit (pause), then change files, stage, Continue
+- [x] Amend staged changes into an older commit
+- [x] Create fixup commit, squash fixup commits above
+- [x] Amend author (all three)
+- [x] Cherry-pick copy on one branch, paste on another (applied oldest first); copied commits marked in the Commits and Branches views; remove one, clear; abort a multi-commit cherry-pick after committing the stopped one by hand
+- [x] Reset soft / mixed / hard, checkout, revert, branch or tag here
+- [x] Copy… (each item), open in browser
+- [x] Commit files: open diff, open at revision, checkout file, remove from commit, move to index, Open All Changes
+- [x] Line-level patches in a commit's diff (both sides, cursor only, several selections, Open All Changes): remove, move to index, move to new commit
+- [x] Custom patch: add lines from two files of a commit (and a whole file from its context menu); from the status bar, move it into an older and a newer commit, apply it (and in reverse) to the working tree, show it, reset it. Adding from another commit asks to start over
+- [x] Filter by file (toolbar, Explorer context menu, editor tab context menu), clear filter
+- [x] Search by message, author and SHA; clear search
+- [x] All branches: other branches' commits are dimmed and can't be rewritten
+- [x] Commit Graph: lanes for `feature/with-merge` and all branches, labels, search, details pane, file diffs, double-click, right-click actions
+- [x] During a paused rebase: steps read `pick  subject`; right-click actions on one and several steps (including reword); reorder; Continue / Skip / Abort on the title bar
+- [x] Bisect: bad / good / skip, marks shown, status bar, reset
+- [x] Compare: select, compare with selected (commits, branches, tags mixed)
+- [x] Undo / redo across: commit, amend, reset, rebase, checkout, merge
 
 ### Stashes and reflog
-- [ ] Stash: all / include untracked / staged only / keep index; apply, pop, drop, rename, branch from stash
-- [ ] Reflog: checkout, reset, branch, cherry-pick copy from an entry
+- [x] Stash: all / include untracked / staged only / keep index; apply, pop, drop, rename, branch from stash
+- [x] Reflog: checkout, reset, branch, cherry-pick copy from an entry
 
 ### General
-- [ ] Right-click menus on a commit, a branch and in the Commit Graph: More Rewrite Actions, Bisect and Upstream submenus hold the moved items; nothing appears where it can't run
-- [ ] A slow action (push to a slow remote, a long rebase) shows a status-bar spinner and, after ~1.5 s, a notification; quick actions flash "…: done" in the status bar
-- [ ] Fetch / Pull / Push buttons on the Source Control "Changes" title bar (setting `codegit.showSyncButtons`)
-- [ ] Rewriting pushed commits asks first (setting `codegit.confirmRewritingPushedCommits`)
-- [ ] Views refresh after you commit or switch branches outside CodeGit
-- [ ] Multi-root workspace / several repositories: Switch Repository
+- [x] Right-click menus on a commit, a branch and in the Commit Graph: More Rewrite Actions, Bisect and Upstream submenus hold the moved items; nothing appears where it can't run
+- [x] A slow action (push to a slow remote, a long rebase) shows a status-bar spinner and, after ~1.5 s, a notification; quick actions flash "…: done" in the status bar
+- [x] Sync view: branch, upstream and ↑↓ counts follow commits, pushes and checkouts; Pull, Push and Publish Branch; the ⌄ quick picks and right-click menus: Pull (Rebase), Fetch, Fetch All, Force Push, Push to Another Branch, Set Upstream
+- [x] Rewriting pushed commits asks first (setting `slothgit.confirmRewritingPushedCommits`)
+- [x] Views refresh after you commit or switch branches outside SlothGit
+- [x] Multi-root workspace / several repositories: Switch Repository
+- [x] Simple Mode: the eye button on the Changes title bar toggles it; advanced actions and the Worktrees section are hidden
+- [x] `codegit.*` settings from before the rename are copied to `slothgit.*`

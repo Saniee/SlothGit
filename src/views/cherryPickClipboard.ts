@@ -32,7 +32,7 @@ export class CherryPickClipboard implements vscode.Disposable {
   }
 
   private changed(): void {
-    void vscode.commands.executeCommand('setContext', 'codegit.hasCherryPicks', this.commits.length > 0);
+    void vscode.commands.executeCommand('setContext', 'slothgit.hasCherryPicks', this.commits.length > 0);
     this.emitter.fire();
   }
 

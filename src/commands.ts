@@ -65,7 +65,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   }
 
   async function confirmRewrite(nodes: CommitNode[]): Promise<boolean> {
-    const enabled = vscode.workspace.getConfiguration('codegit').get('confirmRewritingPushedCommits', true);
+    const enabled = vscode.workspace.getConfiguration('slothgit').get('confirmRewritingPushedCommits', true);
     if (!enabled || !nodes.some((n) => commits.isPushed(n.sha))) return true;
     return confirm(
       'This rewrites commits that are already pushed to the upstream branch. You will need to force push afterwards.',
@@ -160,43 +160,43 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   // --- commands ---------------------------------------------------------------
 
   const commands: Record<string, (...args: any[]) => unknown> = {
-    'codegit.refresh': () => deps.refreshAll(true),
-    'codegit.switchRepository': () => repos.pickRepository(),
+    'slothgit.refresh': () => deps.refreshAll(true),
+    'slothgit.switchRepository': () => repos.pickRepository(),
 
-    'codegit.commit.squash': rewrite('Squashing…', (ops, nodes) => ops.squash(shas(nodes), 'squash'), {
+    'slothgit.commit.squash': rewrite('Squashing…', (ops, nodes) => ops.squash(shas(nodes), 'squash'), {
       fullHistory: true,
     }),
-    'codegit.commit.fixup': rewrite('Fixing up…', (ops, nodes) => ops.squash(shas(nodes), 'fixup'), {
+    'slothgit.commit.fixup': rewrite('Fixing up…', (ops, nodes) => ops.squash(shas(nodes), 'fixup'), {
       fullHistory: true,
     }),
-    'codegit.commit.drop': rewrite('Dropping…', (ops, nodes) => ops.drop(shas(nodes)), {
+    'slothgit.commit.drop': rewrite('Dropping…', (ops, nodes) => ops.drop(shas(nodes)), {
       confirm: (nodes) => `Drop ${plural(nodes, 'commit')}? You can get it back with Undo or from the Reflog view.`,
     }),
-    'codegit.commit.moveUp': rewrite('Moving commit…', (ops, [node]) => ops.move(node.sha, 'up'), {
+    'slothgit.commit.moveUp': rewrite('Moving commit…', (ops, [node]) => ops.move(node.sha, 'up'), {
       single: true,
       fullHistory: true,
       landing: 'up',
     }),
-    'codegit.commit.moveDown': rewrite('Moving commit…', (ops, [node]) => ops.move(node.sha, 'down'), {
+    'slothgit.commit.moveDown': rewrite('Moving commit…', (ops, [node]) => ops.move(node.sha, 'down'), {
       single: true,
       fullHistory: true,
       landing: 'down',
     }),
-    'codegit.commit.autosquash': rewrite('Squashing fixup commits…', (ops, [node]) => ops.autosquash(node.sha), {
+    'slothgit.commit.autosquash': rewrite('Squashing fixup commits…', (ops, [node]) => ops.autosquash(node.sha), {
       single: true,
       fullHistory: true,
       landing: 'none',
     }),
-    'codegit.commit.createFixup': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.createFixup': async (arg?: Node, all?: Node[]) => {
       const node = single(logTargets(arg, all));
       if (node && (await canRewrite([node]))) {
         await runOn([node], 'top', 'Creating fixup commit…', async (ops) => {
           await ops.createFixupCommit(node.sha);
-          return `Created "fixup! ${node.subject}". Use "Squash Fixup Commits Above" to fold it in.`;
+          return `Created "fixup! ${node.subject}". Use "Squash In Fixup Commits Above This" on the original commit to fold it in.`;
         });
       }
     },
-    'codegit.commit.amendAuthor': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.amendAuthor': async (arg?: Node, all?: Node[]) => {
       const node = single(logTargets(arg, all));
       if (!node || !(await canRewrite([node]))) return;
       const picked = await vscode.window.showQuickPick(
@@ -249,7 +249,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
             : ops.addCoAuthor(node.sha, value),
       );
     },
-    'codegit.commit.edit': rewrite(
+    'slothgit.commit.edit': rewrite(
       'Starting rebase…',
       async (ops, [node]) => {
         await ops.edit(node.sha);
@@ -257,9 +257,9 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       },
       { single: true },
     ),
-    'codegit.commit.amendStaged': rewrite('Amending commit…', (ops, [node]) => ops.amendStaged(node.sha), { single: true }),
+    'slothgit.commit.amendStaged': rewrite('Amending commit…', (ops, [node]) => ops.amendStaged(node.sha), { single: true }),
 
-    'codegit.commit.reword': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.reword': async (arg?: Node, all?: Node[]) => {
       const node = single(logTargets(arg, all));
       const git = repos.git();
       if (!node || !git || !(await canRewrite([node]))) return;
@@ -276,19 +276,19 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       await runOn([node], 'same', 'Rewording…', (ops) => ops.reword(node.sha, [newSubject, ...body].join('\n')));
     },
 
-    'codegit.commit.rewordInEditor': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.rewordInEditor': async (arg?: Node, all?: Node[]) => {
       const node = single(logTargets(arg, all));
       const git = repos.git();
       if (!node || !git || !(await canRewrite([node]))) return;
       const original = await getCommitMessage(git, node.sha);
-      const file = await git.gitDirPath('CODEGIT_EDITMSG');
+      const file = await git.gitDirPath('SLOTHGIT_EDITMSG');
       const edited = await editInEditor(file, original, `Reword ${node.shortSha}`);
       if (edited === undefined || edited === original) return;
       if (!(await confirmRewrite([node]))) return;
       await runOn([node], 'same', 'Rewording…', (ops) => ops.reword(node.sha, edited));
     },
 
-    'codegit.commit.copy': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.copy': async (arg?: Node, all?: Node[]) => {
       const node = single(commitTargets(arg, all));
       const git = repos.git();
       if (!node || !git) return;
@@ -305,7 +305,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       const picked = await vscode.window.showQuickPick(items, { title: `Copy from ${node.shortSha}` });
       if (picked) await vscode.env.clipboard.writeText(await picked.value());
     },
-    'codegit.commit.openInBrowser': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.openInBrowser': async (arg?: Node, all?: Node[]) => {
       const node = single(commitTargets(arg, all));
       const git = repos.git();
       if (!node || !git) return;
@@ -317,13 +317,13 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       await vscode.env.openExternal(vscode.Uri.parse(commitUrl(web, node.sha)));
     },
 
-    'codegit.file.removeFromCommit': (arg?: Node, all?: Node[]) => removeFiles(false, arg, all),
-    'codegit.file.moveToIndex': (arg?: Node, all?: Node[]) => removeFiles(true, arg, all),
-    'codegit.patch.add': async () => {
+    'slothgit.file.removeFromCommit': (arg?: Node, all?: Node[]) => removeFiles(false, arg, all),
+    'slothgit.file.moveToIndex': (arg?: Node, all?: Node[]) => removeFiles(true, arg, all),
+    'slothgit.patch.add': async () => {
       const active = activeCommitDiff();
       if (active) await addToPatch(active.diff.file, active.diff.side, active.ranges);
     },
-    'codegit.file.addToPatch': async (arg?: Node, all?: Node[]) => {
+    'slothgit.file.addToPatch': async (arg?: Node, all?: Node[]) => {
       const files = resolve<FileNode>('file', commitsView, arg, all).filter((f) => f.commit?.source === 'log');
       if (files.some((f) => f.commit?.sha !== files[0].commit?.sha)) {
         void vscode.window.showInformationMessage('Select files from a single commit.');
@@ -331,16 +331,16 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       }
       for (const file of files) await addToPatch(file);
     },
-    'codegit.patch.menu': () => patchMenu(),
-    'codegit.patch.reset': () => patch.clear(),
-    'codegit.commit.movePatchHere': async (arg?: Node, all?: Node[]) => {
+    'slothgit.patch.menu': () => patchMenu(),
+    'slothgit.patch.reset': () => patch.clear(),
+    'slothgit.commit.movePatchHere': async (arg?: Node, all?: Node[]) => {
       const target = single(logTargets(arg, all));
       if (target) await movePatch(target);
     },
-    'codegit.patch.remove': () => patchSelection('discard'),
-    'codegit.patch.moveToIndex': () => patchSelection('index'),
-    'codegit.patch.moveToNewCommit': () => patchSelection('newCommit'),
-    'codegit.file.checkout': async (arg?: Node) => {
+    'slothgit.patch.remove': () => patchSelection('discard'),
+    'slothgit.patch.moveToIndex': () => patchSelection('index'),
+    'slothgit.patch.moveToNewCommit': () => patchSelection('newCommit'),
+    'slothgit.file.checkout': async (arg?: Node) => {
       const node = resolve<FileNode>('file', commitsView, arg)[0];
       if (!node?.commit) return;
       const { change } = node.pair;
@@ -353,7 +353,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         await run('Checking out file…', (ops) => ops.checkoutFileFrom(node.pair.rightRef, change.path));
       }
     },
-    'codegit.file.openAtRevision': async (arg?: Node) => {
+    'slothgit.file.openAtRevision': async (arg?: Node) => {
       const node = resolve<FileNode>('file', commitsView, arg)[0];
       if (!node) return;
       const { right, left } = diffUris(repos, node);
@@ -362,11 +362,11 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       await vscode.window.showTextDocument(uri, { preview: true });
     },
 
-    'codegit.commit.copyForCherryPick': (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.copyForCherryPick': (arg?: Node, all?: Node[]) => {
       const nodes = resolve<CommitNode>('commit', commitsView, arg, all);
       if (nodes.length) clipboard.toggle(nodes);
     },
-    'codegit.commit.pasteCherryPick': async () => {
+    'slothgit.commit.pasteCherryPick': async () => {
       const items = clipboard.items;
       if (!items.length) {
         void vscode.window.showInformationMessage('No commits copied. Use "Copy for Cherry-Pick" first.');
@@ -378,33 +378,37 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
         clipboard.clear();
       });
     },
-    'codegit.commit.clearCherryPick': () => clipboard.clear(),
+    'slothgit.commit.uncopyCherryPick': (arg?: Node, all?: Node[]) => {
+      const nodes = resolve<CommitNode>('commit', commitsView, arg, all).filter((n) => clipboard.has(n.sha));
+      if (nodes.length) clipboard.toggle(nodes);
+    },
+    'slothgit.commit.clearCherryPick': () => clipboard.clear(),
 
-    'codegit.commit.reset': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.reset': async (arg?: Node, all?: Node[]) => {
       const node = single(commitTargets(arg, all));
       if (node) await runner.resetTo(node.sha, node.shortSha);
     },
-    'codegit.commit.checkout': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.checkout': async (arg?: Node, all?: Node[]) => {
       const node = single(commitTargets(arg, all));
       if (node) await run('Checking out…', (ops) => ops.checkout(node.sha));
     },
-    'codegit.commit.createBranch': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.createBranch': async (arg?: Node, all?: Node[]) => {
       const node = single(commitTargets(arg, all));
       if (!node) return;
       const name = await runner.askBranchName(`New branch at ${node.shortSha}`);
       if (name) await run('Creating branch…', (ops) => ops.createBranch(name, node.sha, true));
     },
-    'codegit.commit.createTag': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.createTag': async (arg?: Node, all?: Node[]) => {
       const node = single(commitTargets(arg, all));
       if (node) await createTag(runner, node.sha, node.shortSha);
     },
-    'codegit.commit.markBase': (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.markBase': (arg?: Node, all?: Node[]) => {
       const node = single(commitTargets(arg, all));
       if (!node) return;
       setBase(commits.baseSha === node.sha ? undefined : node.sha);
     },
-    'codegit.commit.clearBase': () => setBase(undefined),
-    'codegit.commit.revert': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.clearBase': () => setBase(undefined),
+    'slothgit.commit.revert': async (arg?: Node, all?: Node[]) => {
       const nodes = logTargets(arg, all);
       if (!nodes.length) return;
       const merge = nodes.find((n) => n.parents.length > 1);
@@ -420,16 +424,16 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       if (!(await confirm(`Revert ${plural(nodes, 'commit')}? This creates new commits that undo them.`, 'Revert'))) return;
       await runOn([], 'top', 'Reverting…', (ops) => ops.revert(shas(nodes)));
     },
-    'codegit.commit.copySha': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.copySha': async (arg?: Node, all?: Node[]) => {
       const nodes = commitTargets(arg, all);
       if (nodes.length) await vscode.env.clipboard.writeText(shas(nodes).join('\n'));
     },
-    'codegit.commit.copyMessage': async (arg?: Node, all?: Node[]) => {
+    'slothgit.commit.copyMessage': async (arg?: Node, all?: Node[]) => {
       const node = single(commitTargets(arg, all));
       const git = repos.git();
       if (node && git) await vscode.env.clipboard.writeText(await getCommitMessage(git, node.sha));
     },
-    'codegit.commit.openChanges': async (arg?: Node) => {
+    'slothgit.commit.openChanges': async (arg?: Node) => {
       const node = single(commitTargets(arg));
       const git = repos.git();
       const root = repos.repository?.rootUri;
@@ -438,7 +442,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       const files = (await commits.getChildren(node)) as FileNode[];
       await openMultiDiff(repos, `${node.shortSha}: ${node.subject}`, files);
     },
-    'codegit.openFileDiff': async (node: FileNode) => {
+    'slothgit.openFileDiff': async (node: FileNode) => {
       const root = repos.repository?.rootUri;
       if (!root) return;
       const { left, right } = diffUris(repos, node);
@@ -448,15 +452,15 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       await vscode.commands.executeCommand('vscode.diff', left, right, title, { preview: true });
     },
 
-    'codegit.operation.continue': () => withOperation('Continuing…', (ops, op) => ops.continueOperation(op)),
-    'codegit.operation.abort': () => withOperation('Aborting…', (ops, op) => ops.abortOperation(op)),
-    'codegit.operation.skip': () => withOperation('Skipping…', (ops, op) => ops.skipOperation(op)),
-    'codegit.operation.menu': async () => {
+    'slothgit.operation.continue': () => withOperation('Continuing…', (ops, op) => ops.continueOperation(op)),
+    'slothgit.operation.abort': () => withOperation('Aborting…', (ops, op) => ops.abortOperation(op)),
+    'slothgit.operation.skip': () => withOperation('Skipping…', (ops, op) => ops.skipOperation(op)),
+    'slothgit.operation.menu': async () => {
       const picked = await vscode.window.showQuickPick(
         [
-          { label: '$(debug-continue) Continue', command: 'codegit.operation.continue' },
-          { label: '$(debug-step-over) Skip Current Commit', command: 'codegit.operation.skip' },
-          { label: '$(debug-stop) Abort', command: 'codegit.operation.abort' },
+          { label: '$(debug-continue) Continue', command: 'slothgit.operation.continue' },
+          { label: '$(debug-step-over) Skip Current Commit', command: 'slothgit.operation.skip' },
+          { label: '$(debug-stop) Abort', command: 'slothgit.operation.abort' },
           { label: '$(source-control) Open Source Control', command: 'workbench.view.scm' },
         ],
         { placeHolder: 'Operation in progress' },
@@ -464,30 +468,30 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
       if (picked) await vscode.commands.executeCommand(picked.command);
     },
 
-    'codegit.stash.push': () => stashPush('all'),
-    'codegit.stash.pushStaged': () => stashPush('staged'),
-    'codegit.stash.pushKeepIndex': () => stashPush('keepIndex'),
-    'codegit.stash.apply': async (arg?: Node) => {
+    'slothgit.stash.push': () => stashPush('all'),
+    'slothgit.stash.pushStaged': () => stashPush('staged'),
+    'slothgit.stash.pushKeepIndex': () => stashPush('keepIndex'),
+    'slothgit.stash.apply': async (arg?: Node) => {
       const node = stashTarget(arg);
       if (node) await run('Applying stash…', (ops) => ops.stashApply(node.stash.ref, false));
     },
-    'codegit.stash.pop': async (arg?: Node) => {
+    'slothgit.stash.pop': async (arg?: Node) => {
       const node = stashTarget(arg);
       if (node) await run('Popping stash…', (ops) => ops.stashApply(node.stash.ref, true));
     },
-    'codegit.stash.drop': async (arg?: Node) => {
+    'slothgit.stash.drop': async (arg?: Node) => {
       const node = stashTarget(arg);
       if (!node || !(await confirm(`Drop ${node.stash.ref}: "${node.stash.message}"?`, 'Drop'))) return;
       await run('Dropping stash…', (ops) => ops.stashDrop(node.stash.ref));
     },
-    'codegit.stash.rename': async (arg?: Node) => {
+    'slothgit.stash.rename': async (arg?: Node) => {
       const node = stashTarget(arg);
       if (!node) return;
       const message = await vscode.window.showInputBox({ title: `Rename ${node.stash.ref}`, value: node.stash.message });
       if (message === undefined || message === node.stash.message) return;
       await run('Renaming stash…', (ops) => ops.stashRename(node.stash.ref, node.stash.sha, message));
     },
-    'codegit.stash.branch': async (arg?: Node) => {
+    'slothgit.stash.branch': async (arg?: Node) => {
       const node = stashTarget(arg);
       if (!node) return;
       const name = await runner.askBranchName(`New branch from ${node.stash.ref}`);
@@ -744,7 +748,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
 
   function setBase(sha: string | undefined): void {
     commits.baseSha = sha;
-    void vscode.commands.executeCommand('setContext', 'codegit.hasRebaseBase', !!sha);
+    void vscode.commands.executeCommand('setContext', 'slothgit.hasRebaseBase', !!sha);
     commits.redraw();
     if (sha) {
       void vscode.window.showInformationMessage(
@@ -761,7 +765,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
 }
 
 /**
- * The sides of commit file diffs CodeGit opened, by document URI, so the line-level patch commands know which
+ * The sides of commit file diffs SlothGit opened, by document URI, so the line-level patch commands know which
  * commit and side an editor shows. Only for the Commits view, whose history can be rewritten.
  */
 const commitDiffs = new Map<string, { file: FileNode; side: Side }>();
@@ -779,7 +783,7 @@ function rememberCommitDiff(file: FileNode, left: vscode.Uri, right: vscode.Uri)
 
 function updatePatchContext(editor: vscode.TextEditor | undefined): void {
   const known = !!editor && commitDiffs.has(editor.document.uri.toString());
-  void vscode.commands.executeCommand('setContext', 'codegit.inCommitDiff', known);
+  void vscode.commands.executeCommand('setContext', 'slothgit.inCommitDiff', known);
 }
 
 export function diffUris(repos: RepoManager, node: FileNode) {

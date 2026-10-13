@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.0.0
+
+### Added
+- **Sync view** in the Source Control sidebar: the current branch, its upstream and ↑↓ counts, with Pull and Push buttons (Publish Branch when it has no upstream). Like the Commit button, each has a ⌄ with the other ways to do it, also on right-click: Pull (Rebase), Fetch, Fetch All Remotes; Force Push (with lease), Push to Another Branch, Set Upstream. Drag it above **Changes** to keep it next to the commit box.
+- **Get Started with SlothGit** walkthrough on VS Code's Welcome page (also **Learn Git Concepts…** in each view's **…** menu): what each view shows, what the commit colours and ↑↓ counts mean, Undo and the Reflog, and plain-language guides to tidying commits, merge vs rebase (and interactive rebase), cherry-pick, stashes, worktrees and bisect.
+- **Simple Mode** hides advanced actions (bisect, custom patches, worktrees, compare, resets, upstream settings, the Reflog view) from the menus. Toggle it with the eye button on the Source Control **Changes** title bar or from any SlothGit view's **…** menu; setting `slothgit.simpleMode`.
+- The merge and rebase pickers explain each option in a second line, and link to the guide.
+
+### Changed
+- **Renamed from CodeGit to SlothGit** (the name was taken on the Marketplace). Commands, views and settings now start with `slothgit.`; your `codegit.*` settings are moved over the first time SlothGit starts, and Undo / Redo still understands history recorded under the old name.
+- Branch name prompts check git's naming rules as you type (no spaces, `..`, characters such as `~`, `:` or `*`, a leading `-`, a trailing `.lock` and so on), instead of failing in git afterwards.
+- Simple Mode also hides the ↑ / ↓ buttons on commit rows, like the Move Up / Down menu items.
+- The Fetch / Pull / Push buttons moved from the **Changes** title bar to the Sync view, and the `showSyncButtons` setting is gone. Hide the Sync view (right-click its title) if you don't want it.
+- Plainer menu labels: e.g. **Squash into Previous Commit (Combine Messages)**, **Fixup into Previous Commit (Discard This Message)**, **Add Staged Changes to This Commit**, **Check Out This Commit (Without a Branch)**, **Update from Remote (Fast-Forward)**, **Force Push (Safely, with Lease)**, **Pop Stash (Apply and Delete It)**, "Staged" instead of "Index", and the bisect actions say what Good and Bad mean.
+- Commits copied for cherry-pick are marked in the Branches view too (blue clipboard icon, "copied"), and the Commits view title shows how many are copied. **Remove from Cherry-Pick** un-copies one; **Clear Copied Commits** is on the Branches title bar as well.
+- Continue and Abort are on the Branches title bar while a rebase, merge, cherry-pick or revert is stopped.
+- **Rebase Current Branch onto This** with a branch the current branch already contains now says there is nothing to rebase (and suggests merging the other way), instead of running a rebase that changes nothing.
+
+### Fixed
+- Copied commits are cherry-picked oldest first, whatever order they were copied in. Copying the newest first used to apply it first and conflict.
+- A cherry-pick or revert of several commits is still recognised after the stopped commit was committed by hand (e.g. from the Commit button after resolving a conflict). Continue, Skip and Abort used to say nothing was in progress, while git still had the rest queued.
+- Actions on the checked-out branch right after switching to it (before the Branches view had refreshed) could treat it as not checked out: **Fast-forward** failed with "refusing to fetch into branch", and checkout, delete, rebase and new worktrees could misjudge it. They now ask git which branch is checked out.
+
 ## 0.4.0
 
 ### Changed

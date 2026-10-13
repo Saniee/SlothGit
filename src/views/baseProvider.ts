@@ -58,6 +58,7 @@ export abstract class BaseProvider<TRoot extends Node> implements vscode.TreeDat
 
   /** Re-render existing items without reloading data. */
   redraw(): void {
+    if (this.view) this.view.description = this.description();
     this.emitter.fire();
   }
 

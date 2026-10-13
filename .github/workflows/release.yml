@@ -1,5 +1,6 @@
 # Builds the extension and attaches the .vsix to a GitHub Release when a version tag is pushed.
-# Nothing is published to the Marketplace.
+# Also publishes to Open VSX when the repository has an OVSX_PAT secret (an Open VSX access token).
+# Nothing is published to the VS Code Marketplace.
 #
 #   1. Set "version" in package.json (e.g. 0.1.0) and commit.
 #   2. git tag 0.1.0 && git push origin 0.1.0     (a "v" prefix works too: v0.1.0)
@@ -43,8 +44,7 @@ jobs:
           npm test
 
       - name: Package
-        # --skip-license: the repository has no LICENSE file yet.
-        run: npx vsce package --skip-license --out "codegit-${GITHUB_REF_NAME#v}.vsix"
+        run: npx vsce package --out "slothgit-${GITHUB_REF_NAME#v}.vsix"
 
       - name: Create release
         env:
@@ -55,7 +55,22 @@ jobs:
           # Release notes: this version's section of CHANGELOG.md, or GitHub's generated notes when it has none.
           awk -v v="${GITHUB_REF_NAME#v}" '/^## / { found = ($2 == v); next } found' CHANGELOG.md > notes.md
           if [[ -s notes.md ]]; then notes=(--notes-file notes.md); else notes=(--generate-notes); fi
-          gh release create "${GITHUB_REF_NAME}" codegit-*.vsix \
-            --title "CodeGit ${GITHUB_REF_NAME}" \
+          gh release create "${GITHUB_REF_NAME}" slothgit-*.vsix \
+            --title "SlothGit ${GITHUB_REF_NAME}" \
             "${notes[@]}" \
             ${prerelease}
+
+      - name: Check for an Open VSX token
+        id: ovsx
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: echo "enabled=${OVSX_PAT:+true}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to Open VSX
+        if: steps.ovsx.outputs.enabled == 'true'
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          prerelease=""
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then prerelease="--pre-release"; fi
+          npx ovsx publish slothgit-*.vsix --skip-duplicate ${prerelease}

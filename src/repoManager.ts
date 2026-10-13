@@ -4,7 +4,7 @@ import { Git } from './git/runner';
 import { repoSignature } from './git/signature';
 import type { API, Repository } from './types/git';
 
-/** Tracks which repository CodeGit is showing and signals when it (or its state) changes. */
+/** Tracks which repository SlothGit is showing and signals when it (or its state) changes. */
 export class RepoManager implements vscode.Disposable {
   private current: Repository | undefined;
   private stateListener: vscode.Disposable | undefined;
@@ -45,7 +45,7 @@ export class RepoManager implements vscode.Disposable {
 
   ops(): GitOps | undefined {
     const git = this.git();
-    const updateStackedBranches = vscode.workspace.getConfiguration('codegit').get<OpsOptions['updateStackedBranches']>('updateStackedBranches');
+    const updateStackedBranches = vscode.workspace.getConfiguration('slothgit').get<OpsOptions['updateStackedBranches']>('updateStackedBranches');
     return git && new GitOps(git, this.editorCommand, { updateStackedBranches });
   }
 
@@ -65,12 +65,12 @@ export class RepoManager implements vscode.Disposable {
       description: repo === this.current ? 'current' : undefined,
       repo,
     }));
-    const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Repository to show in CodeGit' });
+    const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Repository to show in SlothGit' });
     if (picked) this.select(picked.repo);
   }
 
   private ensureRepository(): void {
-    void vscode.commands.executeCommand('setContext', 'codegit.multipleRepos', this.api.repositories.length > 1);
+    void vscode.commands.executeCommand('setContext', 'slothgit.multipleRepos', this.api.repositories.length > 1);
     if (this.current && this.api.repositories.includes(this.current)) return;
     const editor = vscode.window.activeTextEditor;
     const fromEditor = editor ? this.api.getRepository(editor.document.uri) : null;
@@ -83,13 +83,13 @@ export class RepoManager implements vscode.Disposable {
     this.signature = undefined;
     this.stateListener?.dispose();
     this.stateListener = repo?.state.onDidChange(() => this.scheduleChange());
-    void vscode.commands.executeCommand('setContext', 'codegit.hasRepository', !!repo);
+    void vscode.commands.executeCommand('setContext', 'slothgit.hasRepository', !!repo);
     this.changeEmitter.fire();
   }
 
   private scheduleChange(): void {
     clearTimeout(this.debounce);
-    // The Git extension reports every change, including edits to files; CodeGit's views only show refs and history.
+    // The Git extension reports every change, including edits to files; SlothGit's views only show refs and history.
     this.debounce = setTimeout(async () => {
       const signature = await this.currentSignature();
       if (signature !== undefined && signature === this.signature) return;

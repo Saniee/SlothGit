@@ -2,41 +2,14 @@
 // isn't enough to see how branches relate. Data comes from the same queries; right-click actions are the
 // Commits view's own commands, through VS Code's webview context menu.
 import * as vscode from 'vscode';
-import { layoutGraph, parseRefs, type GraphRef, type GraphRow } from '../git/graph';
-import { getCommitMessage, getLog, getMainRefs, getRemotes, getUnpushed, notOnHead, reachableFrom, type Commit, type Person } from '../git/queries';
+import { layoutGraph, parseRefs, type GraphRow } from '../git/graph';
+import { currentBranch, getCommitMessage, getLog, getMainRefs, getRemotes, getUnpushed, notOnHead, reachableFrom, type Commit } from '../git/queries';
 import type { RepoManager } from '../repoManager';
-import { graphHtml } from './graphHtml';
+import type { FromGraph, GraphCommit, GraphState, ToGraph } from '../webview/messages';
+import { pageHtml, webviewOptions } from './webviewShell';
+import body from '../webview/graph/body.html';
 import type { CommitNode, FileNode } from './nodes';
 import { commitFiles, config } from './providers';
-
-/** One row as the page receives it. */
-export interface GraphCommit {
-  sha: string;
-  shortSha: string;
-  subject: string;
-  author: string;
-  email: string;
-  coAuthors: Person[];
-  relDate: string;
-  date: string;
-  parents: string[];
-  refs: GraphRef[];
-  onHead: boolean;
-  /** null when the branch has no upstream. */
-  pushed: boolean | null;
-  /** On a main branch (codegit.mainBranches). */
-  merged: boolean;
-  head: boolean;
-  graph: GraphRow;
-}
-
-type FromPage =
-  | { type: 'ready' | 'refresh' }
-  | { type: 'search'; query: string }
-  | { type: 'allBranches'; value: boolean }
-  | { type: 'select'; sha: string }
-  | { type: 'open'; sha: string }
-  | { type: 'openFile'; sha: string; path: string };
 
 export class GraphPanel implements vscode.Disposable {
   private static current: GraphPanel | undefined;
@@ -60,29 +33,42 @@ export class GraphPanel implements vscode.Disposable {
     return GraphPanel.current?.nodes.get(sha);
   }
 
+  /** How many rows the open page last drew, for tests. */
+  static renderedRows(): number | undefined {
+    return GraphPanel.current?.rendered;
+  }
+
+  private rendered: number | undefined;
+
   private readonly panel: vscode.WebviewPanel;
 
   private constructor(
     context: vscode.ExtensionContext,
     private readonly repos: RepoManager,
   ) {
-    this.panel = vscode.window.createWebviewPanel('codegit.graph', 'Commit Graph', vscode.ViewColumn.Active, {
-      enableScripts: true,
+    this.panel = vscode.window.createWebviewPanel('slothgit.graph', 'Commit Graph', vscode.ViewColumn.Active, {
+      ...webviewOptions(context.extensionUri),
       retainContextWhenHidden: true,
-      localResourceRoots: [],
     });
-    this.panel.webview.html = graphHtml(this.panel.webview);
+    this.panel.webview.html = pageHtml(this.panel.webview, context.extensionUri, 'graph', 'Commit Graph', body);
     this.disposables.push(
       this.panel.onDidDispose(() => this.dispose()),
-      this.panel.webview.onDidReceiveMessage((m: FromPage) => this.onMessage(m)),
+      this.panel.webview.onDidReceiveMessage((m: FromGraph) => this.onMessage(m)),
       this.panel.onDidChangeViewState((e) => e.webviewPanel.visible && this.load()),
       repos.onDidChange(() => this.panel.visible && this.load()),
     );
     context.subscriptions.push(this);
   }
 
-  private async onMessage(message: FromPage): Promise<void> {
+  private post(message: ToGraph): void {
+    void this.panel.webview.postMessage(message);
+  }
+
+  private async onMessage(message: FromGraph): Promise<void> {
     switch (message.type) {
+      case 'rendered':
+        this.rendered = message.rows;
+        return;
       case 'ready':
       case 'refresh':
         return this.load();
@@ -96,7 +82,7 @@ export class GraphPanel implements vscode.Disposable {
         return this.details(message.sha);
       case 'open': {
         const node = this.nodes.get(message.sha);
-        if (node) await vscode.commands.executeCommand('codegit.commit.openChanges', node);
+        if (node) await vscode.commands.executeCommand('slothgit.commit.openChanges', node);
         return;
       }
       case 'openFile': {
@@ -104,7 +90,7 @@ export class GraphPanel implements vscode.Disposable {
         const git = this.repos.git();
         if (!node || !git) return;
         const file = (await commitFiles(git, node)).find((f: FileNode) => f.pair.change.path === message.path);
-        if (file) await vscode.commands.executeCommand('codegit.openFileDiff', file);
+        if (file) await vscode.commands.executeCommand('slothgit.openFileDiff', file);
         return;
       }
     }
@@ -113,7 +99,7 @@ export class GraphPanel implements vscode.Disposable {
   private async load(): Promise<void> {
     const git = this.repos.git();
     if (!git) {
-      void this.panel.webview.postMessage({ type: 'rows', rows: [], state: this.state(undefined) });
+      this.post({ type: 'rows', rows: [], state: this.state(undefined) });
       return;
     }
     const limit = config('commitLimit', 300);
@@ -122,7 +108,7 @@ export class GraphPanel implements vscode.Disposable {
       getRemotes(git),
       getUnpushed(git),
       git.exec(['rev-parse', '-q', '--verify', 'HEAD'], { allowedExitCodes: [1, 128] }),
-      git.exec(['branch', '--show-current'], { allowedExitCodes: [128] }),
+      currentBranch(git),
       getMainRefs(git, config<string[]>('mainBranches', ['main', 'master'])),
     ]);
     const shas = log.map((c) => c.sha);
@@ -152,17 +138,12 @@ export class GraphPanel implements vscode.Disposable {
       head: c.sha === headSha,
       graph: graph[i],
     }));
-    this.panel.title = `Commit Graph${branch.stdout.trim() ? `: ${branch.stdout.trim()}` : ''}`;
-    void this.panel.webview.postMessage({ type: 'rows', rows, state: this.state(rows.length === limit ? limit : undefined) });
+    this.panel.title = `Commit Graph${branch ? `: ${branch}` : ''}`;
+    this.post({ type: 'rows', rows, state: this.state(rows.length === limit ? limit : undefined) });
   }
 
-  private state(limit: number | undefined) {
-    return {
-      search: this.search,
-      all: this.all,
-      limit,
-      repository: this.repos.repository?.rootUri.fsPath ?? '',
-    };
+  private state(limit: number | undefined): GraphState {
+    return { search: this.search, all: this.all, limit };
   }
 
   private async details(sha: string): Promise<void> {
@@ -170,7 +151,7 @@ export class GraphPanel implements vscode.Disposable {
     const git = this.repos.git();
     if (!node || !git) return;
     const [message, files] = await Promise.all([getCommitMessage(git, sha), commitFiles(git, node)]);
-    void this.panel.webview.postMessage({
+    this.post({
       type: 'details',
       sha,
       message,
@@ -197,7 +178,7 @@ interface WebviewContext {
  */
 export function fromGraph(args: unknown[]): unknown[] {
   const [first] = args;
-  if (first && typeof first === 'object' && (first as WebviewContext).webview === 'codegit.graph') {
+  if (first && typeof first === 'object' && (first as WebviewContext).webview === 'slothgit.graph') {
     const node = (first as WebviewContext).sha ? GraphPanel.commit((first as WebviewContext).sha!) : undefined;
     return node ? [node] : [];
   }

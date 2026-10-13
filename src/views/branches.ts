@@ -11,7 +11,9 @@ import {
   type LocalBranch,
 } from '../git/queries';
 import type { Git } from '../git/runner';
+import type { RepoManager } from '../repoManager';
 import { BaseProvider } from './baseProvider';
+import type { CherryPickClipboard } from './cherryPickClipboard';
 import type { CommitNode, Node, RefNode, RemoteNode, SectionNode, WorktreeNode } from './nodes';
 import { coAuthorLines, commitFiles, commitLabel, config } from './providers';
 
@@ -24,6 +26,14 @@ const SECTIONS: Record<SectionNode['section'], { label: string; icon: string; ex
 
 /** lazygit's branches panel: local branches, remotes with their branches, and tags. */
 export class BranchesProvider extends BaseProvider<SectionNode> {
+  constructor(
+    repos: RepoManager,
+    output: vscode.LogOutputChannel,
+    private readonly clipboard: CherryPickClipboard,
+  ) {
+    super(repos, output);
+  }
+
   /** Local branches from the last load, for pickers and name lookups. */
   get localBranches(): LocalBranch[] {
     const local = this.roots.find((s) => s.section === 'local');
@@ -79,11 +89,16 @@ export class BranchesProvider extends BaseProvider<SectionNode> {
       { kind: 'section', section: 'local', children: localNodes },
       { kind: 'section', section: 'remotes', children: remoteNodes },
       { kind: 'section', section: 'tags', children: tagNodes },
-      {
-        kind: 'section',
-        section: 'worktrees',
-        children: worktrees.map((worktree): WorktreeNode => ({ kind: 'worktree', worktree })),
-      },
+      // Worktrees are an advanced feature: Simple Mode leaves the section out.
+      ...(config('simpleMode', false)
+        ? []
+        : [
+            {
+              kind: 'section' as const,
+              section: 'worktrees' as const,
+              children: worktrees.map((worktree): WorktreeNode => ({ kind: 'worktree', worktree })),
+            },
+          ]),
     ];
   }
 
@@ -100,7 +115,7 @@ export class BranchesProvider extends BaseProvider<SectionNode> {
       case 'ref':
         return refItem(node);
       case 'commit':
-        return commitItem(node);
+        return commitItem(node, this.clipboard.has(node.sha));
       case 'worktree':
         return worktreeItem(node);
       default:
@@ -206,13 +221,20 @@ function refItem(node: RefNode): vscode.TreeItem {
   return item;
 }
 
-function commitItem(node: CommitNode): vscode.TreeItem {
+function commitItem(node: CommitNode, copied: boolean): vscode.TreeItem {
   const item = new vscode.TreeItem(commitLabel(node), vscode.TreeItemCollapsibleState.Collapsed);
   item.id = `ref:${node.parentRev}:${node.sha}`;
   item.description = node.relDate;
   item.tooltip = [node.sha, `${node.author}, ${node.relDate}`, ...coAuthorLines(node), '', node.subject].join('\n');
-  item.iconPath = new vscode.ThemeIcon('git-commit');
-  item.contextValue = 'refcommit';
+  // Copied for cherry-pick: marked as in the Commits view, since the copy is usually made from another branch.
+  item.iconPath = copied
+    ? new vscode.ThemeIcon('clippy', new vscode.ThemeColor('charts.blue'))
+    : new vscode.ThemeIcon('git-commit');
+  if (copied) {
+    item.tooltip += '\n\nCopied for cherry-pick';
+    item.description = `copied · ${item.description}`;
+  }
+  item.contextValue = copied ? 'refcommit:copied' : 'refcommit';
   return item;
 }
 

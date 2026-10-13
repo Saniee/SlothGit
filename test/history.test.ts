@@ -79,13 +79,22 @@ describe('history', { concurrency }, () => {
     assert.equal(plan.redo, undefined);
 
     const afterUndo = planUndo([
-      { sha: 'b', subject: '[codegit undo]' },
+      { sha: 'b', subject: '[slothgit undo]' },
       { sha: 'c', subject: 'commit: c' },
       { sha: 'b', subject: 'commit: b' },
       { sha: 'a', subject: 'commit (initial): a' },
     ]);
     assert.equal(afterUndo.undo?.to, 'b');
     assert.equal(afterUndo.redo?.to, 'c');
+
+    // Undo entries written before the rename from CodeGit still count.
+    const afterLegacyUndo = planUndo([
+      { sha: 'b', subject: '[codegit undo]' },
+      { sha: 'c', subject: 'commit: c' },
+      { sha: 'b', subject: 'commit: b' },
+      { sha: 'a', subject: 'commit (initial): a' },
+    ]);
+    assert.equal(afterLegacyUndo.redo?.to, 'c');
 
     const inRebase = planUndo([
       { sha: 'd1', subject: 'rebase (start): checkout x' },
@@ -284,7 +293,7 @@ describe('history', { concurrency }, () => {
 
   test('worktrees: add, list, remove', async () => {
     const r = setup(1);
-    const wt = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'codegit-wt-')), 'feature');
+    const wt = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'slothgit-wt-')), 'feature');
     await r.ops.addWorktree(wt, { newBranch: 'feature', start: 'HEAD' });
     let worktrees = await getWorktrees(r.git);
     assert.equal(worktrees.length, 2);

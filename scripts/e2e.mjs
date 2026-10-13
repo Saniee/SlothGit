@@ -1,5 +1,5 @@
 // End-to-end test: builds the playground repository (scripts/playground.mjs) in a temp folder, opens it in
-// the installed VS Code with a throwaway profile, and runs test/e2e/index.ts, which drives every CodeGit
+// the installed VS Code with a throwaway profile, and runs test/e2e/index.ts, which drives every SlothGit
 // command with scripted answers to its prompts and checks the resulting git state.
 //
 //   npm run e2e                       all scenarios
@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { build, root, runInVSCode } from './vscode-run.mjs';
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegit-e2e-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'slothgit-e2e-'));
 const playground = path.join(tmp, 'playground');
 execFileSync('node', [path.join(root, 'scripts', 'playground.mjs'), playground], { stdio: 'ignore' });
 const repo = path.join(playground, 'repo');
@@ -26,9 +26,9 @@ const result = await runInVSCode({
   profile: tmp,
   timeout: 15 * 60_000,
   env: {
-    CODEGIT_E2E_PLAYGROUND: playground,
-    CODEGIT_E2E_REPORT: report,
-    CODEGIT_E2E_FILTER: process.argv.slice(2).join(' '),
+    SLOTHGIT_E2E_PLAYGROUND: playground,
+    SLOTHGIT_E2E_REPORT: report,
+    SLOTHGIT_E2E_FILTER: process.argv.slice(2).join(' '),
   },
 });
 

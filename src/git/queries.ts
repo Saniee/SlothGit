@@ -261,6 +261,13 @@ export async function getOperation(git: Git): Promise<Operation | undefined> {
   for (const [marker, operation] of markers) {
     if (fs.existsSync(await git.gitDirPath(marker))) return operation;
   }
+  // A multi-commit cherry-pick or revert whose stopped commit was committed by hand (e.g. after resolving a
+  // conflict) has no CHERRY_PICK_HEAD / REVERT_HEAD, but the rest is still queued in the sequencer.
+  const todo = await git.gitDirPath('sequencer/todo');
+  if (fs.existsSync(todo)) {
+    const first = fs.readFileSync(todo, 'utf8').trimStart().split(/\s/, 1)[0];
+    return first === 'revert' || first === 'r' ? 'revert' : 'cherry-pick';
+  }
   return undefined;
 }
 
@@ -271,6 +278,15 @@ export async function hasStagedChanges(git: Git): Promise<boolean> {
 
 export async function getCommitMessage(git: Git, sha: string): Promise<string> {
   return (await git.run(['log', '-1', '--format=%B', sha])).replace(/\s+$/, '');
+}
+
+/**
+ * The checked-out branch's name, or undefined when HEAD is detached (including during a rebase). Ask this before
+ * acting on "the current branch": the views' cached state can lag a moment behind a checkout.
+ */
+export async function currentBranch(git: Git): Promise<string | undefined> {
+  const result = await git.exec(['symbolic-ref', '--short', '-q', 'HEAD'], { allowedExitCodes: [1, 128] });
+  return (result.exitCode === 0 && result.stdout.trim()) || undefined;
 }
 
 export async function headSha(git: Git): Promise<string> {

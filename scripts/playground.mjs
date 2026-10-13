@@ -1,7 +1,7 @@
-// Builds a throwaway repository with a scenario for every CodeGit feature, for manual testing.
+// Builds a throwaway repository with a scenario for every SlothGit feature, for manual testing.
 // Everything is local: the "remotes" are bare repositories next to it, so pushing and fetching are safe.
 //
-//   npm run playground                  (creates ../codegit-playground)
+//   npm run playground                  (creates ../slothgit-playground)
 //   npm run playground -- <folder>      (somewhere else; re-running replaces a previous playground)
 //
 // See TESTING.md for what to try in it.
@@ -10,13 +10,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const MARKER = '.codegit-playground';
+const MARKER = '.slothgit-playground';
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const root = path.resolve(process.argv[2] ?? path.join(project, '..', 'codegit-playground'));
+const root = path.resolve(process.argv[2] ?? path.join(project, '..', 'slothgit-playground'));
 
 if (fs.existsSync(root)) {
   if (!fs.existsSync(path.join(root, MARKER))) {
-    console.error(`${root} exists and is not a CodeGit playground; refusing to touch it.`);
+    console.error(`${root} exists and is not a SlothGit playground; refusing to touch it.`);
     process.exit(1);
   }
   // Clear the contents (worktrees included) but keep the folder, which may be some shell's cwd.
@@ -196,7 +196,7 @@ g('add', 'notes.txt');
 write({ 'README.md': '# Playground\n\nNow with documentation and profiles.\n\nUnstaged edit.\n' });
 
 console.log(`
-CodeGit playground ready:  ${repo}
+SlothGit playground ready:  ${repo}
 
 Open it with:
   code "${repo}"

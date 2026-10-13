@@ -36,7 +36,7 @@ function setup() {
 }
 
 function withOrigin(r: ReturnType<typeof setup>) {
-  const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'codegit-origin-'));
+  const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'slothgit-origin-'));
   git(bare, 'init', '-q', '--bare', '-b', 'main');
   r.sh('remote', 'add', 'origin', bare);
   r.sh('push', '-q', '-u', 'origin', 'main');
@@ -206,7 +206,7 @@ describe('branches', { concurrency }, () => {
     const r = setup();
     const bare = withOrigin(r);
     // Another clone pushes a commit.
-    const other = fs.mkdtempSync(path.join(os.tmpdir(), 'codegit-other-'));
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), 'slothgit-other-'));
     git(other, 'clone', '-q', bare, '.');
     git(other, 'config', 'user.name', 'O');
     git(other, 'config', 'user.email', 'o@example.com');

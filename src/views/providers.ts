@@ -24,7 +24,7 @@ import type { CherryPickClipboard } from './cherryPickClipboard';
 import type { CommitNode, FileNode, Node, StashNode, TodoNode } from './nodes';
 
 export function config<T>(key: string, fallback: T): T {
-  return vscode.workspace.getConfiguration('codegit').get<T>(key, fallback);
+  return vscode.workspace.getConfiguration('slothgit').get<T>(key, fallback);
 }
 
 /** "Ada Lovelace" -> "AL", as lazygit shows authors. */
@@ -78,7 +78,7 @@ const TODO_MEANINGS: Record<TodoEntry['action'], string> = {
 
 export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
   private unpushed: Set<string> | null = null;
-  /** Commits already on a main branch (codegit.mainBranches), and which one. */
+  /** Commits already on a main branch (slothgit.mainBranches), and which one. */
   private merged = new Set<string>();
   private mainRef: string | undefined;
   private head: string | undefined;
@@ -123,10 +123,10 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
   protected async load(git: Git): Promise<(CommitNode | TodoNode)[]> {
     const [bisect, operation] = await Promise.all([getBisectState(git), getOperation(git)]);
     this.bisect = bisect;
-    void vscode.commands.executeCommand('setContext', 'codegit.bisecting', !!bisect);
-    void vscode.commands.executeCommand('setContext', 'codegit.commitsFiltered', !!this.filterPath);
-    void vscode.commands.executeCommand('setContext', 'codegit.commitsSearching', !!this.search);
-    void vscode.commands.executeCommand('setContext', 'codegit.commitsAllBranches', this.allBranches);
+    void vscode.commands.executeCommand('setContext', 'slothgit.bisecting', !!bisect);
+    void vscode.commands.executeCommand('setContext', 'slothgit.commitsFiltered', !!this.filterPath);
+    void vscode.commands.executeCommand('setContext', 'slothgit.commitsSearching', !!this.search);
+    void vscode.commands.executeCommand('setContext', 'slothgit.commitsAllBranches', this.allBranches);
 
     // While bisecting HEAD jumps around; keep showing the branch the bisect started from.
     const ref = bisect ? bisect.start : 'HEAD';
@@ -171,6 +171,7 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
       this.filterPath && `file: ${this.filterPath}`,
       this.search && `search: ${this.search}`,
       this.allBranches && 'all branches',
+      this.clipboard.items.length && `${this.clipboard.items.length} copied`,
     ];
     return parts.filter(Boolean).join(' · ') || undefined;
   }
@@ -227,6 +228,7 @@ export class CommitsProvider extends BaseProvider<CommitNode | TodoNode> {
       node.parents.length === 0 && 'root',
       merge && 'merge',
       node.onHead === false && 'other',
+      copied && 'copied',
     ].filter(Boolean);
     item.contextValue = ['commit', ...flags].join(':');
     return item;

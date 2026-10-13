@@ -2,7 +2,8 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { createTag, openMultiDiff, webRepo } from './commands';
 import { pullRequestUrl } from './git/hosting';
-import { getCommitFiles, getRemoteDefaultBranch, headSha } from './git/queries';
+import { currentBranch, getCommitFiles, getLocalBranches, getRemoteDefaultBranch, getRemotes, headSha, type LocalBranch } from './git/queries';
+import { branchNameError } from './git/refName';
 import { GitError } from './git/runner';
 import type { RepoManager } from './repoManager';
 import type { Runner } from './runner';
@@ -10,6 +11,7 @@ import { ForcePushMode } from './types/git';
 import type { BranchesProvider } from './views/branches';
 import type { FileNode, Node, RefNode, RemoteNode, WorktreeNode } from './views/nodes';
 import type { CommitsProvider } from './views/providers';
+import { learn, learnItem } from './learn';
 
 export interface BranchCommandDeps {
   repos: RepoManager;
@@ -58,16 +60,48 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
     await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(dir), { forceNewWindow: newWindow });
   }
 
-  function currentBranch(): string | undefined {
-    return branches.localBranches.find((b) => b.current)?.name;
+  // What is checked out always comes from git, never from the Branches view: the view can lag a moment behind a
+  // checkout, and only loads while it is open.
+
+  async function headBranch(): Promise<string | undefined> {
+    const git = repos.git();
+    return git && currentBranch(git);
   }
 
-  function currentLabel(): string {
-    return currentBranch() ?? 'HEAD';
+  /** The checked-out branch's name for messages, or "HEAD" when detached. */
+  async function currentLabel(): Promise<string> {
+    return (await headBranch()) ?? 'HEAD';
+  }
+
+  /** The checked-out branch with its upstream state, or undefined when HEAD is detached. */
+  async function currentLocal(): Promise<LocalBranch | undefined> {
+    const git = repos.git();
+    return git && (await getLocalBranches(git, 'name')).find((b) => b.current);
+  }
+
+  /** currentLocal() as a Branches view node. Warns when HEAD is detached. */
+  async function currentRef(): Promise<LocalRef | undefined> {
+    if (!repos.git()) return undefined;
+    const branch = await currentLocal();
+    if (!branch) {
+      void vscode.window.showWarningMessage('HEAD is detached; check out a branch first.');
+      return undefined;
+    }
+    return { kind: 'ref', type: 'local', name: branch.name, rev: branch.name, sha: branch.sha, branch };
+  }
+
+  function hasUpstream(node: LocalRef): boolean {
+    const b = node.branch;
+    if (b.upstream && !b.gone) return true;
+    void vscode.window.showWarningMessage(
+      b.upstream ? `The upstream ${b.upstream.name} no longer exists on the remote.` : `${b.name} has no upstream branch to pull from.`,
+    );
+    return false;
   }
 
   async function pickRemote(title: string): Promise<string | undefined> {
-    const names = branches.remoteNames;
+    const git = repos.git();
+    const names = git ? (await getRemotes(git)).map((r) => r.name) : [];
     if (!names.length) {
       void vscode.window.showWarningMessage('This repository has no remotes. Add one in the Branches view first.');
       return undefined;
@@ -105,8 +139,16 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
     );
   }
 
+  /** True when `rev` is already in the current branch's history, so rebasing onto it changes nothing. */
+  async function alreadyContains(rev: string): Promise<boolean> {
+    const git = repos.git();
+    if (!git) return false;
+    const result = await git.exec(['merge-base', '--is-ancestor', rev, 'HEAD'], { allowedExitCodes: [1, 128] }).catch(() => undefined);
+    return result?.exitCode === 0;
+  }
+
   async function confirmPushedRewrite(exclude: string): Promise<boolean> {
-    if (!vscode.workspace.getConfiguration('codegit').get('confirmRewritingPushedCommits', true)) return true;
+    if (!vscode.workspace.getConfiguration('slothgit').get('confirmRewritingPushedCommits', true)) return true;
     const ops = repos.ops();
     const count = ops ? await ops.countPushedCommitsAfter(exclude).catch(() => 0) : 0;
     if (!count) return true;
@@ -135,11 +177,11 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
   // --- commands ---------------------------------------------------------------
 
   const commands: Record<string, (...args: any[]) => unknown> = {
-    'codegit.branch.checkout': async (arg?: Node) => {
+    'slothgit.branch.checkout': async (arg?: Node) => {
       const node = refTarget(arg, 'local', 'remote', 'tag');
       if (!node) return;
       if (node.type === 'local') {
-        if (node.branch.current) return;
+        if (node.name === (await headBranch())) return;
         const worktree = node.branch.worktreePath;
         if (worktree) {
           // git refuses to check out a branch that another worktree has; offer to go there instead (as lazygit does).
@@ -160,19 +202,19 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
         await run(`Checking out ${node.name}…`, (ops) => ops.checkout(node.rev));
       }
     },
-    'codegit.branch.checkoutPrevious': () => run('Checking out previous branch…', (ops) => ops.switchPrevious()),
+    'slothgit.branch.checkoutPrevious': () => run('Checking out previous branch…', (ops) => ops.switchPrevious()),
 
-    'codegit.branch.create': async (arg?: Node) => {
+    'slothgit.branch.create': async (arg?: Node) => {
       const node = target(arg);
       const from = node?.kind === 'ref' ? node : undefined;
-      const label = from?.name ?? currentLabel();
+      const label = from?.name ?? (await currentLabel());
       const suggestion = from?.type === 'remote' ? from.branch.branch : undefined;
       const name = await runner.askBranchName(`New branch from ${label}`, suggestion);
       if (name) await run('Creating branch…', (ops) => ops.createBranch(name, from?.rev ?? 'HEAD', true));
     },
 
-    'codegit.branch.moveCommitsToNewBranch': async () => {
-      const current = branches.localBranches.find((b) => b.current);
+    'slothgit.branch.moveCommitsToNewBranch': async () => {
+      const current = await currentLocal();
       if (!current) {
         void vscode.window.showInformationMessage('Check out the branch the commits were made on first.');
         return;
@@ -186,7 +228,7 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       });
     },
 
-    'codegit.branch.delete': async (arg?: Node) => {
+    'slothgit.branch.delete': async (arg?: Node) => {
       const node = refTarget(arg, 'local', 'remote');
       if (!node) return;
       if (node.type === 'remote') {
@@ -196,7 +238,7 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
         return;
       }
       const b = node.branch;
-      if (b.current) {
+      if (b.name === (await headBranch())) {
         void vscode.window.showWarningMessage('You cannot delete the branch that is checked out.');
         return;
       }
@@ -218,7 +260,7 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       if (await confirm(`Delete the local branch "${b.name}"?`, 'Delete')) await deleteLocalBranch(node, false);
     },
 
-    'codegit.branch.rename': async (arg?: Node) => {
+    'slothgit.branch.rename': async (arg?: Node) => {
       const node = refTarget(arg, 'local');
       if (!node) return;
       const name = await runner.askBranchName(`Rename ${node.name}`, node.name);
@@ -231,38 +273,65 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       });
     },
 
-    'codegit.branch.merge': async (arg?: Node) => {
+    'slothgit.branch.merge': async (arg?: Node) => {
       const node = refTarget(arg, 'local', 'remote', 'tag');
       if (!node) return;
+      const into = await currentLabel();
       const picked = await vscode.window.showQuickPick(
         [
-          { label: 'Merge', description: 'Fast-forward when possible', mode: 'default' as const },
-          { label: 'Merge, Always Create a Merge Commit', description: '--no-ff', mode: 'noFastForward' as const },
-          { label: 'Squash Merge', description: 'Stage the combined changes without committing', mode: 'squash' as const },
+          {
+            label: 'Merge',
+            description: 'fast-forward when possible',
+            detail: `Brings ${node.name}'s commits into ${into}. If ${into} has nothing new, it just moves forward; otherwise a merge commit joins the two.`,
+            mode: 'default' as const,
+          },
+          {
+            label: 'Merge, Always Create a Merge Commit',
+            description: '--no-ff',
+            detail: `Always adds a merge commit, so the history shows where ${node.name} was merged in.`,
+            mode: 'noFastForward' as const,
+          },
+          {
+            label: 'Squash Merge',
+            description: '--squash',
+            detail: `Stages all of ${node.name}'s changes for you to commit as one new commit. Its individual commits aren't kept.`,
+            mode: 'squash' as const,
+          },
+          learnItem('merge-rebase', 'Merge or rebase? What these options mean'),
         ],
-        { title: `Merge ${node.name} into ${currentLabel()}` },
+        { title: `Merge ${node.name} into ${into}` },
       );
       if (!picked) return;
+      if ('learn' in picked) return learn(picked.learn);
       await run(`Merging ${node.name}…`, async (ops) => {
         await ops.merge(node.rev, picked.mode);
         if (picked.mode === 'squash') return `The changes from ${node.name} are staged. Commit them in Source Control.`;
       });
     },
 
-    'codegit.branch.rebase': async (arg?: Node) => {
+    'slothgit.branch.rebase': async (arg?: Node) => {
       const node = refTarget(arg, 'local', 'remote', 'tag');
       if (!node) return;
-      if (node.type === 'local' && node.branch.current) {
+      if (node.type === 'local' && node.name === (await headBranch())) {
         void vscode.window.showInformationMessage('Pick a different branch to rebase the current branch onto.');
         return;
       }
       // lazygit's rebase menu: simple or interactive, each also from the marked base commit when there is one.
       const base = commits.baseSha;
+      const current = await currentLabel();
+      const mine = `${current}'s commits`;
       const options: (vscode.QuickPickItem & { useBase: boolean; interactive: boolean })[] = [
-        { label: 'Simple Rebase', description: `Move every commit not on ${node.name}`, useBase: false, interactive: false },
+        {
+          label: 'Simple Rebase',
+          description: `move every commit not on ${node.name}`,
+          detail: `Replays ${mine} on top of ${node.name}, as if you had started from its latest commit. The commits get new IDs.`,
+          useBase: false,
+          interactive: false,
+        },
         {
           label: 'Interactive Rebase',
-          description: 'Pause first to reorder, squash or drop commits',
+          description: 'pause first to plan it',
+          detail: `Lists ${mine} first, so you can reorder, squash, reword or drop them before they're replayed.`,
           useBase: false,
           interactive: true,
         },
@@ -270,25 +339,43 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       if (base) {
         const after = `the commits after ${base.slice(0, 7)}`;
         options.unshift(
-          { label: 'Rebase from Marked Base', description: `Move only ${after}`, useBase: true, interactive: false },
-          { label: 'Interactive Rebase from Marked Base', description: `Plan ${after} first`, useBase: true, interactive: true },
+          {
+            label: 'Rebase from Marked Base',
+            description: `move only ${after}`,
+            detail: 'For a branch started from another feature branch: the commits up to the marked base stay behind.',
+            useBase: true,
+            interactive: false,
+          },
+          { label: 'Interactive Rebase from Marked Base', description: `plan ${after} first`, useBase: true, interactive: true },
         );
       }
-      const picked = await vscode.window.showQuickPick(options, { title: `Rebase ${currentLabel()} onto ${node.name}` });
+      const picked = await vscode.window.showQuickPick(
+        [...options, learnItem('merge-rebase', 'What is a rebase? When to merge instead')],
+        { title: `Rebase ${current} onto ${node.name}` },
+      );
       if (!picked) return;
+      if ('learn' in picked) return learn(picked.learn);
       const { useBase, interactive } = picked;
+      if (!useBase && !interactive && (await alreadyContains(node.rev))) {
+        // git would "rebase" by fast-forwarding through the same commits and change nothing.
+        void vscode.window.showInformationMessage(
+          `${current} already contains ${node.name}, so there is nothing to rebase. ` +
+            `To bring ${current}'s commits into ${node.name}, check out ${node.name} and merge ${current} instead.`,
+        );
+        return;
+      }
       if (!(await confirmPushedRewrite(useBase ? base! : node.rev))) return;
       const ok = await run(`Rebasing onto ${node.name}…`, async (ops) => {
         await ops.rebaseOnto(node.rev, useBase ? base : undefined, interactive);
         if (interactive) {
-          void vscode.commands.executeCommand('codegit.commits.focus');
+          void vscode.commands.executeCommand('slothgit.commits.focus');
           return 'Rebase paused before the first commit. Right-click the steps at the top of the Commits view to change them, then Continue.';
         }
       });
-      if (ok && useBase) await vscode.commands.executeCommand('codegit.commit.clearBase');
+      if (ok && useBase) await vscode.commands.executeCommand('slothgit.commit.clearBase');
     },
 
-    'codegit.branch.fastForward': async (arg?: Node) => {
+    'slothgit.branch.fastForward': async (arg?: Node) => {
       const node = refTarget(arg, 'local');
       const upstream = node?.branch.upstream;
       if (!node || !upstream) return;
@@ -297,7 +384,8 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
         return;
       }
       await run(`Fast-forwarding ${node.name}…`, async (ops, repo) => {
-        if (node.branch.current) {
+        // Asks git rather than the tree, which can lag a moment behind a checkout.
+        if ((await currentBranch(ops.git)) === node.name) {
           await repo.fetch({ remote: upstream.remote, ref: upstream.remoteRef });
           await ops.fastForwardCurrent();
         } else {
@@ -307,7 +395,7 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       });
     },
 
-    'codegit.branch.setUpstream': async (arg?: Node) => {
+    'slothgit.branch.setUpstream': async (arg?: Node) => {
       const node = refTarget(arg, 'local');
       if (!node) return;
       const names = branches.remoteBranchNames;
@@ -320,14 +408,14 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       const upstream = await vscode.window.showQuickPick(items, { title: `Upstream for ${node.name}` });
       if (upstream) await run('Setting upstream…', (ops) => ops.setUpstream(node.name, upstream));
     },
-    'codegit.branch.unsetUpstream': async (arg?: Node) => {
+    'slothgit.branch.unsetUpstream': async (arg?: Node) => {
       const node = refTarget(arg, 'local');
       if (node) await run('Unsetting upstream…', (ops) => ops.setUpstream(node.name, undefined));
     },
-    'codegit.branch.setAsUpstream': async (arg?: Node) => {
+    'slothgit.branch.setAsUpstream': async (arg?: Node) => {
       const node = refTarget(arg, 'remote');
-      const current = currentBranch();
       if (!node) return;
+      const current = await headBranch();
       if (!current) {
         void vscode.window.showWarningMessage('HEAD is detached; check out a branch first.');
         return;
@@ -338,48 +426,91 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       });
     },
 
-    'codegit.branch.push': async (arg?: Node) => {
+    'slothgit.branch.push': async (arg?: Node) => {
       const node = refTarget(arg, 'local');
       if (node) await pushBranch(node, false);
     },
-    'codegit.branch.forcePush': async (arg?: Node) => {
+    'slothgit.branch.forcePush': async (arg?: Node) => {
       const node = refTarget(arg, 'local');
       if (node) await pushBranch(node, true);
     },
 
-    'codegit.branch.reset': async (arg?: Node) => {
+    'slothgit.branch.reset': async (arg?: Node) => {
       const node = refTarget(arg, 'local', 'remote', 'tag');
       if (node) await runner.resetTo(node.rev, node.name);
     },
-    'codegit.branch.compare': async (arg?: Node) => {
+    'slothgit.branch.compare': async (arg?: Node) => {
       const node = refTarget(arg, 'local', 'remote', 'tag');
       const git = repos.git();
       if (!node || !git) return;
       const head = await headSha(git);
       const pairs = await getCommitFiles(git, node.sha, head);
-      const files: FileNode[] = pairs.map((pair) => ({ kind: 'file', pair, label: `${currentLabel()} ↔ ${node.name}` }));
-      await openMultiDiff(repos, `${currentLabel()} ↔ ${node.name}`, files);
+      const label = `${await currentLabel()} ↔ ${node.name}`;
+      const files: FileNode[] = pairs.map((pair) => ({ kind: 'file', pair, label }));
+      await openMultiDiff(repos, label, files);
     },
-    'codegit.branch.copyName': async (arg?: Node) => {
+    'slothgit.branch.copyName': async (arg?: Node) => {
       const node = refTarget(arg, 'local', 'remote', 'tag');
       if (node) await vscode.env.clipboard.writeText(node.name);
     },
 
     // --- remotes ---------------------------------------------------------------
 
-    // Buttons on the Source Control "Changes" title bar. They forward to the built-in Git commands; the
-    // argument is the SourceControl the button belongs to, which the Git extension maps to its repository.
-    'codegit.scm.fetch': (sourceControl?: unknown) => vscode.commands.executeCommand('git.fetch', sourceControl),
-    'codegit.scm.pull': (sourceControl?: unknown) => vscode.commands.executeCommand('git.pull', sourceControl),
-    'codegit.scm.push': (sourceControl?: unknown) => vscode.commands.executeCommand('git.push', sourceControl),
+    // --- Sync view (the current branch) --------------------------------------------
 
-    'codegit.fetchAll': () =>
+    'slothgit.sync.fetch': () => run('Fetching…', (_ops, repo) => repo.fetch()),
+    'slothgit.sync.pull': async () => {
+      const node = await currentRef();
+      if (node && hasUpstream(node)) await run(`Pulling ${node.name}…`, (_ops, repo) => repo.pull());
+    },
+    'slothgit.sync.pullRebase': async () => {
+      const node = await currentRef();
+      const upstream = node?.branch.upstream;
+      if (!node || !hasUpstream(node) || !upstream) return;
+      // Fetches through the built-in Git extension (its credential prompts apply), then rebases here, so a
+      // conflict or failure is reported like any other SlothGit rebase (Continue / Skip / Abort).
+      await run(`Pulling ${node.name} (rebase)…`, async (ops, repo) => {
+        await repo.fetch({ remote: upstream.remote, ref: upstream.remoteRef });
+        await ops.rebaseOnto('@{upstream}');
+      });
+    },
+    'slothgit.sync.push': async () => {
+      const node = await currentRef();
+      if (node) await pushBranch(node, false);
+    },
+    'slothgit.sync.forcePush': async () => {
+      const node = await currentRef();
+      if (node) await pushBranch(node, true);
+    },
+    'slothgit.sync.pushTo': async () => {
+      const node = await currentRef();
+      const remote = node && (await pickRemote(`Push ${node.name} to`));
+      if (!node || !remote) return;
+      const target = await vscode.window.showInputBox({
+        title: `Push ${node.name} to a branch on ${remote}`,
+        prompt: 'Name of the branch on the remote. Your upstream stays as it is.',
+        value: node.name,
+        validateInput: branchNameError,
+      });
+      if (!target) return;
+      const name = target;
+      await run(`Pushing ${node.name} to ${remote}/${name}…`, async (_ops, repo) => {
+        await repo.push(remote, `refs/heads/${node.name}:refs/heads/${name}`);
+        return `Pushed ${node.name} to ${remote}/${name}.`;
+      });
+    },
+    'slothgit.sync.setUpstream': async () => {
+      const node = await currentRef();
+      if (node) await vscode.commands.executeCommand('slothgit.branch.setUpstream', node);
+    },
+
+    'slothgit.fetchAll': () =>
       run('Fetching all remotes…', (_ops, repo) => repo.fetch({ all: true, prune: true })),
-    'codegit.remote.fetch': async (arg?: Node) => {
+    'slothgit.remote.fetch': async (arg?: Node) => {
       const node = remoteTarget(arg);
       if (node) await run(`Fetching ${node.remote.name}…`, (_ops, repo) => repo.fetch({ remote: node.remote.name, prune: true }));
     },
-    'codegit.remote.add': async () => {
+    'slothgit.remote.add': async () => {
       const existing = branches.remoteNames;
       const name = await vscode.window.showInputBox({
         title: 'Add remote',
@@ -395,30 +526,30 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
         await run(`Fetching ${name}…`, (_ops, repo) => repo.fetch({ remote: name }));
       }
     },
-    'codegit.remote.remove': async (arg?: Node) => {
+    'slothgit.remote.remove': async (arg?: Node) => {
       const node = remoteTarget(arg);
       if (!node) return;
       const question = `Remove the remote "${node.remote.name}"? Its remote-tracking branches are deleted locally; nothing changes on the server.`;
       if (await confirm(question, 'Remove')) await run('Removing remote…', (ops) => ops.removeRemote(node.remote.name));
     },
-    'codegit.remote.rename': async (arg?: Node) => {
+    'slothgit.remote.rename': async (arg?: Node) => {
       const node = remoteTarget(arg);
       if (!node) return;
       const name = await vscode.window.showInputBox({ title: `Rename ${node.remote.name}`, value: node.remote.name });
       if (name && name !== node.remote.name) await run('Renaming remote…', (ops) => ops.renameRemote(node.remote.name, name));
     },
-    'codegit.remote.editUrl': async (arg?: Node) => {
+    'slothgit.remote.editUrl': async (arg?: Node) => {
       const node = remoteTarget(arg);
       if (!node) return;
       const url = await vscode.window.showInputBox({ title: `URL for ${node.remote.name}`, value: node.remote.url });
       if (url && url !== node.remote.url) await run('Updating remote URL…', (ops) => ops.setRemoteUrl(node.remote.name, url));
     },
-    'codegit.remote.copyUrl': async (arg?: Node) => {
+    'slothgit.remote.copyUrl': async (arg?: Node) => {
       const node = remoteTarget(arg);
       if (node) await vscode.env.clipboard.writeText(node.remote.url);
     },
 
-    'codegit.branch.createPullRequest': async (arg?: Node) => {
+    'slothgit.branch.createPullRequest': async (arg?: Node) => {
       const node = refTarget(arg, 'local', 'remote');
       const git = repos.git();
       if (!node || !git) return;
@@ -431,7 +562,7 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
             : undefined;
       if (!remoteSide) {
         const choice = await vscode.window.showInformationMessage(`Push "${node.name}" before creating a pull request.`, 'Push');
-        if (choice) await vscode.commands.executeCommand('codegit.branch.push', node);
+        if (choice) await vscode.commands.executeCommand('slothgit.branch.push', node);
         return;
       }
       const web = await webRepo(git, remoteSide.remote);
@@ -443,20 +574,20 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       await vscode.env.openExternal(vscode.Uri.parse(pullRequestUrl(web, remoteSide.branch, base)));
     },
 
-    'codegit.branch.deleteMerged': async () => {
+    'slothgit.branch.deleteMerged': async () => {
       const ops = repos.ops();
       if (!ops) return;
       const merged = (await ops.mergedBranches()).filter(
         (name) => !branches.localBranches.find((b) => b.name === name)?.worktreePath,
       );
       if (!merged.length) {
-        void vscode.window.showInformationMessage(`No other branches are fully merged into ${currentLabel()}.`);
+        void vscode.window.showInformationMessage(`No other branches are fully merged into ${await currentLabel()}.`);
         return;
       }
       const keep = new Set(['main', 'master', 'develop', 'dev', 'trunk']);
       const picked = await vscode.window.showQuickPick(
         merged.map((name) => ({ label: name, picked: !keep.has(name) })),
-        { title: `Delete branches merged into ${currentLabel()}`, canPickMany: true },
+        { title: `Delete branches merged into ${await currentLabel()}`, canPickMany: true },
       );
       if (!picked?.length) return;
       await run('Deleting merged branches…', async (o) => {
@@ -465,33 +596,34 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       });
     },
 
-    'codegit.branch.sort': async () => {
-      const current = vscode.workspace.getConfiguration('codegit').get<string>('branchSort', 'recency');
+    'slothgit.branch.sort': async () => {
+      const current = vscode.workspace.getConfiguration('slothgit').get<string>('branchSort', 'recency');
       const options = [
         { label: 'Recently Checked Out', value: 'recency' },
         { label: 'Latest Commit', value: 'date' },
         { label: 'Name', value: 'name' },
       ].map((o) => ({ ...o, description: o.value === current ? 'current' : undefined }));
       const picked = await vscode.window.showQuickPick(options, { title: 'Sort local branches by' });
-      if (picked) await vscode.workspace.getConfiguration('codegit').update('branchSort', picked.value, vscode.ConfigurationTarget.Global);
+      if (picked) await vscode.workspace.getConfiguration('slothgit').update('branchSort', picked.value, vscode.ConfigurationTarget.Global);
     },
 
     // --- worktrees -----------------------------------------------------------------
 
-    'codegit.worktree.add': async (arg?: Node) => {
+    'slothgit.worktree.add': async (arg?: Node) => {
       const root = repos.repository?.rootUri.fsPath;
       if (!root) return;
       const node = target(arg);
       const from = node?.kind === 'ref' ? node : undefined;
 
       // A local branch not checked out anywhere can be used directly; anything else needs a new branch.
-      const usable = from?.type === 'local' && !from.branch.current && !from.branch.worktreePath ? from.name : undefined;
+      const usable =
+        from?.type === 'local' && from.name !== (await headBranch()) && !from.branch.worktreePath ? from.name : undefined;
       let options: { branch: string } | { newBranch: string; start: string };
       if (usable) {
         options = { branch: usable };
       } else {
         const suggestion = from?.type === 'remote' ? from.branch.branch : undefined;
-        const name = await runner.askBranchName(`New branch for the worktree (from ${from?.name ?? currentLabel()})`, suggestion);
+        const name = await runner.askBranchName(`New branch for the worktree (from ${from?.name ?? (await currentLabel())})`, suggestion);
         if (!name) return;
         options = { newBranch: name, start: from?.rev ?? 'HEAD' };
       }
@@ -504,15 +636,15 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       const choice = await vscode.window.showInformationMessage(`Created a worktree for "${branch}".`, 'Open in New Window');
       if (choice) await openFolder(dir, true);
     },
-    'codegit.worktree.open': async (arg?: Node) => {
+    'slothgit.worktree.open': async (arg?: Node) => {
       const node = worktreeTarget(arg);
       if (node) await openFolder(node.worktree.path, true);
     },
-    'codegit.worktree.openHere': async (arg?: Node) => {
+    'slothgit.worktree.openHere': async (arg?: Node) => {
       const node = worktreeTarget(arg);
       if (node) await openFolder(node.worktree.path, false);
     },
-    'codegit.worktree.remove': async (arg?: Node) => {
+    'slothgit.worktree.remove': async (arg?: Node) => {
       const node = worktreeTarget(arg);
       if (!node) return;
       const w = node.worktree;
@@ -534,20 +666,20 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
         await run('Removing worktree…', (ops) => ops.removeWorktree(w.path, true));
       }
     },
-    'codegit.worktree.prune': () => run('Pruning worktrees…', (ops) => ops.pruneWorktrees()),
-    'codegit.worktree.copyPath': async (arg?: Node) => {
+    'slothgit.worktree.prune': () => run('Pruning worktrees…', (ops) => ops.pruneWorktrees()),
+    'slothgit.worktree.copyPath': async (arg?: Node) => {
       const node = worktreeTarget(arg);
       if (node) await vscode.env.clipboard.writeText(node.worktree.path);
     },
 
     // --- tags --------------------------------------------------------------------
 
-    'codegit.tag.create': async (arg?: Node) => {
+    'slothgit.tag.create': async (arg?: Node) => {
       const node = target(arg);
       if (node?.kind === 'ref') await createTag(runner, node.rev, node.name);
-      else await createTag(runner, 'HEAD', currentLabel());
+      else await createTag(runner, 'HEAD', await currentLabel());
     },
-    'codegit.tag.delete': async (arg?: Node) => {
+    'slothgit.tag.delete': async (arg?: Node) => {
       const node: TagRef | undefined = refTarget(arg, 'tag');
       if (!node) return;
       const picked = await vscode.window.showQuickPick(
@@ -563,7 +695,7 @@ export function registerBranchCommands(deps: BranchCommandDeps): vscode.Disposab
       if (!(await run('Deleting tag…', (ops) => ops.deleteTag(node.name)))) return;
       if (remote) await deleteRemoteRef(remote, `refs/tags/${node.name}`);
     },
-    'codegit.tag.push': async (arg?: Node) => {
+    'slothgit.tag.push': async (arg?: Node) => {
       const node: TagRef | undefined = refTarget(arg, 'tag');
       if (!node) return;
       const remote = await pickRemote(`Push ${node.name} to`);

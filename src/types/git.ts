@@ -31,6 +31,7 @@ export interface Repository {
   // Network operations go through the built-in extension so its credential prompts (askpass) apply.
   fetch(options?: FetchOptions): Promise<void>;
   /** Runs `git push [flags] <remoteName> <branchName>`; branchName can be any refspec. */
+  pull(): Promise<void>;
   push(remoteName?: string, branchName?: string, setUpstream?: boolean, force?: ForcePushMode): Promise<void>;
 }
 
