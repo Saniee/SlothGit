@@ -9,5 +9,6 @@ tsconfig.json
 .gitignore
 scripts/**
 TESTING.md
+TODO.md
 .github/**
 .env

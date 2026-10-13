@@ -11,7 +11,8 @@ const common = {
   format: 'cjs',
   target: 'node18',
   sourcemap: !production,
-  minify: production,
+  // Not minified, even for the package: the Marketplace scans extension code, and readable code is easier to clear.
+  minify: false,
   logLevel: 'info',
   // Webview page markup (src/webview/<page>/body.html) is inlined as a string.
   loader: { '.html': 'text' },
@@ -47,6 +48,9 @@ const builds = tests
       { ...common, entryPoints: ['src/rebaseEditor.ts'], outfile: 'dist/rebaseEditor.js' },
       ...pages,
     ];
+
+// A package must not pick up bundles left in dist by another branch's build.
+if (production) fs.rmSync('dist', { recursive: true, force: true });
 
 if (watch) {
   for (const options of builds) {

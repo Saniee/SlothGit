@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+### Changed
+- The package ships readable (unminified) code and no longer includes the internal `TODO.md`, to clear the Marketplace's content check.
+
 ## 1.0.0
 
 ### Added

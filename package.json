@@ -2,7 +2,7 @@
   "name": "slothgit",
   "displayName": "SlothGit",
   "description": "Lazygit-inspired power tools for VS Code's built-in Git: rewrite history from a commit list, amend older commits, manage stashes, browse the reflog.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "Saniee",
   "license": "GPL-3.0-only",
   "icon": "media/icon.png",
