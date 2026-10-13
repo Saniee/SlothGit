@@ -10,3 +10,4 @@ tsconfig.json
 scripts/**
 TESTING.md
 .github/**
+.env

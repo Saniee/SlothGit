@@ -2230,7 +2230,7 @@
     "test": "node esbuild.mjs && node esbuild.mjs --tests && node --test \"out-test/**/*.test.js\"",
     "vscode:prepublish": "npm run typecheck && node esbuild.mjs --production",
     "package": "vsce package",
-    "publish:ovsx": "node scripts/publish-ovsx.mjs",
+    "publish:ovsx": "node --env-file-if-exists=.env scripts/publish-ovsx.mjs",
     "smoke": "node scripts/smoke.mjs",
     "playground": "node scripts/playground.mjs",
     "e2e": "node scripts/e2e.mjs"
