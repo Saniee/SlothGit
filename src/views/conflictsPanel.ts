@@ -98,11 +98,7 @@ export class ConflictsPanel implements vscode.Disposable {
         await vscode.window.showTextDocument(this.uri(message.path), { viewColumn: vscode.ViewColumn.Beside, preview: false });
         return;
       case 'openMerge':
-        // The built-in Git extension's command; it opens the three-way merge editor for a conflicted file.
-        await vscode.commands
-          .executeCommand('git.openMergeEditor', this.uri(message.path))
-          .then(undefined, () => vscode.window.showTextDocument(this.uri(message.path), { viewColumn: vscode.ViewColumn.Beside }));
-        return;
+        return this.openMergeEditor(message.path);
       case 'operation':
         return this.runOperation(message.action);
     }
@@ -112,6 +108,14 @@ export class ConflictsPanel implements vscode.Disposable {
   async runOperation(action: 'continue' | 'skip' | 'abort'): Promise<void> {
     await vscode.commands.executeCommand(`slothgit.operation.${action}`);
     await this.reload();
+  }
+
+  /** Opens `file` in the three-way merge editor, or as a plain file when that isn't available. */
+  async openMergeEditor(file: string): Promise<void> {
+    // The built-in Git extension's command; it opens the merge editor for a conflicted file.
+    await vscode.commands
+      .executeCommand('git.openMergeEditor', this.uri(file))
+      .then(undefined, () => vscode.window.showTextDocument(this.uri(file), { viewColumn: vscode.ViewColumn.Beside }));
   }
 
   /** Stages `file` as it is in the working tree. */
@@ -130,30 +134,42 @@ export class ConflictsPanel implements vscode.Disposable {
   }
 
   /**
-   * Replaces one hunk of `file` with the chosen side, through the editor's document so unsaved changes in an open
-   * editor are kept, and saves it. When it was the last hunk, the file is marked resolved. `expected` is the hunk
-   * as shown; if the file has changed since, nothing is edited.
+   * Replaces one hunk of `file` with the chosen side. An editor with unsaved changes is edited (and saved) so those
+   * changes are kept; otherwise the file on disk is, since an unchanged open document may not have caught up with
+   * what git wrote. When it was the last hunk, the file is marked resolved. `expected` is the hunk as shown; if the
+   * file has changed since, nothing is edited.
    */
   async resolveHunk(file: string, index: number, choice: HunkChoice, expected?: ConflictHunk): Promise<void> {
-    const document = await vscode.workspace.openTextDocument(this.uri(file));
-    const text = document.getText();
+    const uri = this.uri(file);
+    const document = this.dirtyDocument(uri.fsPath);
+    const text = document ? document.getText() : fs.readFileSync(uri.fsPath, 'utf8');
     const hunk = parseConflicts(text)[index];
     if (!hunk || (expected && JSON.stringify(hunk) !== JSON.stringify(expected))) {
       void vscode.window.showWarningMessage(`${file} changed since the conflicts were listed. Check it again.`);
       await this.reload();
       return;
     }
-    const edit = new vscode.WorkspaceEdit();
-    edit.replace(document.uri, new vscode.Range(document.positionAt(0), document.positionAt(text.length)), resolveHunk(text, index, choice));
-    if (!(await vscode.workspace.applyEdit(edit)) || !(await document.save())) {
-      void vscode.window.showWarningMessage(`Couldn't change ${file}.`);
-      return;
+    const resolved = resolveHunk(text, index, choice);
+    if (document) {
+      const edit = new vscode.WorkspaceEdit();
+      edit.replace(document.uri, new vscode.Range(document.positionAt(0), document.positionAt(text.length)), resolved);
+      if (!(await vscode.workspace.applyEdit(edit)) || !(await document.save())) {
+        void vscode.window.showWarningMessage(`Couldn't change ${file}.`);
+        return;
+      }
+    } else {
+      fs.writeFileSync(uri.fsPath, resolved);
     }
-    if (parseConflicts(document.getText()).length === 0) {
+    if (parseConflicts(resolved).length === 0) {
       await this.markResolved(file);
     } else {
       await this.reload();
     }
+  }
+
+  /** The open document for `fsPath` if it has unsaved changes. */
+  private dirtyDocument(fsPath: string): vscode.TextDocument | undefined {
+    return vscode.workspace.textDocuments.find((d) => d.isDirty && d.uri.fsPath === vscode.Uri.file(fsPath).fsPath);
   }
 
   private async act(title: string, fn: Parameters<Runner['run']>[1]): Promise<void> {
@@ -183,18 +199,17 @@ export class ConflictsPanel implements vscode.Disposable {
     if (this.seen.stop !== stop) this.seen = { stop, paths: new Set() };
     const conflicts = await getConflicts(git);
     conflicts.forEach((c) => this.seen.paths.add(c.path));
-    const open = new Map(vscode.workspace.textDocuments.map((d) => [d.uri.fsPath, d]));
-    const files = conflicts.map((c): ConflictFileState => ({ path: c.path, kind: c.kind, ...this.hunks(git.cwd, c.path, open) }));
+    const files = conflicts.map((c): ConflictFileState => ({ path: c.path, kind: c.kind, ...this.hunks(git.cwd, c.path) }));
     const resolved = [...this.seen.paths].filter((p) => !conflicts.some((c) => c.path === p)).sort();
     this.state = { ...labels(stopped), files: [...files, ...resolved.map((p): ConflictFileState => ({ path: p, hunks: [] }))] };
     this.post({ type: 'state', state: this.state });
     return this.state;
   }
 
-  /** The file's conflict hunks, from an open editor when there is one (it may have unsaved changes). */
-  private hunks(root: string, file: string, open: Map<string, vscode.TextDocument>): Pick<ConflictFileState, 'hunks' | 'binary'> {
+  /** The file's conflict hunks, from an editor with unsaved changes when there is one. */
+  private hunks(root: string, file: string): Pick<ConflictFileState, 'hunks' | 'binary'> {
     const full = path.join(root, file);
-    const document = open.get(vscode.Uri.file(full).fsPath);
+    const document = this.dirtyDocument(full);
     if (document) return { hunks: parseConflicts(document.getText()) };
     if (!fs.existsSync(full)) return { hunks: [] };
     const content = fs.readFileSync(full);

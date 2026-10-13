@@ -20,5 +20,4 @@ From the 1.0.0 tech-debt review and code review, not done yet:
 
 ## Features
 
-- **Conflicts panel: try the Merge Editor button by hand.** It runs the built-in Git extension's `git.openMergeEditor` (falling back to opening the file); no automated test opens the merge editor.
 - **Rebase editor: drag by hand once in VS Code.** Dropping rows was tested with synthetic drag events in a browser, and the e2e tests set the plan through a test message; no automated test drags with a real mouse.

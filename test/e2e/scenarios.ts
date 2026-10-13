@@ -29,6 +29,8 @@ async function waitFor<T>(what: string, fn: () => T | undefined | Promise<T | un
   }
 }
 
+// TabInputTextMerge is newer than the @types/vscode this builds against.
+const isMergeEditor = (input: unknown) => !!input && typeof input === 'object' && 'base' in input && 'result' in input;
 const activeTabLabel = () => vscode.window.tabGroups.activeTabGroup.activeTab?.label ?? '';
 const clipboard = () => vscode.env.clipboard.readText();
 
@@ -264,7 +266,9 @@ scenario('rebase editor: from a commit, reorder, reword and run it in one go', a
 /** The conflicts panel once its page shows `files` ("path: state" each). */
 async function conflictsPanel(t: Context, files: string[]) {
   const panel = await waitFor('the conflicts panel', () => t.api.conflictsPanel());
-  await waitFor(`the conflicts panel to show ${files.join(', ')}`, () => panel.rendered?.files.join(', ') === files.join(', '));
+  await waitFor(`the conflicts panel to show ${files.join(', ')}`, () => panel.rendered?.files.join(', ') === files.join(', ')).catch((e: Error) => {
+    throw new Error(`${e.message}; it shows ${JSON.stringify(panel.rendered)}, git status ${JSON.stringify(t.status())}`);
+  });
   return panel;
 }
 
@@ -297,6 +301,10 @@ scenario('conflicts panel: resolve a hunk, reopen, keep a side, then continue th
   assert.equal(panel.state!.detail, 'Merging conflict/status-line into main.');
   const [hunk] = panel.state!.files[0].hunks;
   assert.ok(hunk.current.includes('status: BUG') && hunk.incoming.includes('status: maintenance'), JSON.stringify(hunk));
+
+  await panel.openMergeEditor('app.txt');
+  await waitFor('the merge editor', () => isMergeEditor(vscode.window.tabGroups.activeTabGroup.activeTab?.input));
+  await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
 
   await panel.resolveHunk('app.txt', 0, 'incoming', hunk);
   await conflictsPanel(t, ['app.txt: resolved']);
