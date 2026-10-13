@@ -9,6 +9,11 @@
 ### Changed
 - **Interactive Rebase** in the branch rebase menu opens the rebase editor. Its **Plan in Commits View** button starts the rebase paused before the first commit, as before.
 
+## 1.0.1
+
+### Changed
+- The package ships readable (unminified) code and no longer includes the internal `TODO.md`, to clear the Marketplace's content check.
+
 ## 1.0.0
 
 ### Added
