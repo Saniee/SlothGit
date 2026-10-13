@@ -24,6 +24,12 @@ import { planUndo, REDO_MARKER, UNDO_MARKER, type UndoAction, type UndoPlan } fr
 export const ROOT = '--root';
 
 /**
+ * For the commands that can stop on conflicts: the markers also hold the lines as they were before either side
+ * changed them, which the conflicts panel shows. diff3 rather than zdiff3, which needs Git 2.35.
+ */
+const SHOW_BASE = ['-c', 'merge.conflictStyle=diff3'];
+
+/**
  * Builds the shell command git runs as its (sequence) editor. Git executes editors through `sh`
  * (bundled with Git for Windows too), so POSIX quoting and forward slashes work everywhere.
  * ELECTRON_RUN_AS_NODE lets VS Code's own executable act as node; plain node ignores it.
@@ -122,7 +128,7 @@ export class GitOps {
     if (options.message !== undefined) env.SLOTHGIT_COMMIT_MESSAGE = options.message;
     const autosquash = options.autosquash ? '--autosquash' : '--no-autosquash';
     const range = options.onto ? ['--onto', options.onto, base] : [base];
-    await this.git.exec(['rebase', '--interactive', '--autostash', autosquash, ...merges, ...this.updateRefsFlags(), ...range], { env });
+    await this.git.exec([...SHOW_BASE, 'rebase', '--interactive', '--autostash', autosquash, ...merges, ...this.updateRefsFlags(), ...range], { env });
   }
 
   /**
@@ -418,12 +424,12 @@ export class GitOps {
   /** Applies oldest first, whatever order the commits were copied in; newest first would conflict with itself. */
   async cherryPick(shas: string[]): Promise<void> {
     const ordered = shas.length > 1 ? (await this.git.run(['rev-list', '--no-walk=sorted', '--reverse', ...shas])).split(/\r?\n/).filter(Boolean) : shas;
-    await this.git.exec(['cherry-pick', ...ordered]);
+    await this.git.exec([...SHOW_BASE, 'cherry-pick', ...ordered]);
   }
 
   /** `mainline` is the parent (1-based) a merge commit is reverted against, the side whose changes are kept. */
   async revert(shas: string[], mainline?: number): Promise<void> {
-    await this.git.exec(['revert', '--no-edit', ...(mainline ? ['-m', `${mainline}`] : []), ...shas]);
+    await this.git.exec([...SHOW_BASE, 'revert', '--no-edit', ...(mainline ? ['-m', `${mainline}`] : []), ...shas]);
   }
 
   async reset(sha: string, mode: ResetMode): Promise<void> {
@@ -496,7 +502,7 @@ export class GitOps {
 
   async merge(ref: string, mode: 'default' | 'noFastForward' | 'squash'): Promise<void> {
     const flags = { default: ['--no-edit'], noFastForward: ['--no-ff', '--no-edit'], squash: ['--squash'] }[mode];
-    await this.git.exec(['merge', ...flags, ref], { env: { GIT_EDITOR: ':' } });
+    await this.git.exec([...SHOW_BASE, 'merge', ...flags, ref], { env: { GIT_EDITOR: ':' } });
   }
 
   /**
@@ -511,7 +517,7 @@ export class GitOps {
       return;
     }
     const args = base ? ['--onto', target, base] : [target];
-    await this.git.exec(['rebase', '--autostash', ...this.updateRefsFlags(), ...args], { env: { GIT_EDITOR: ':' } });
+    await this.git.exec([...SHOW_BASE, 'rebase', '--autostash', ...this.updateRefsFlags(), ...args], { env: { GIT_EDITOR: ':' } });
   }
 
   /**
@@ -674,7 +680,7 @@ export class GitOps {
   }
 
   async continueOperation(operation: Operation): Promise<void> {
-    await this.git.exec([operation, '--continue'], { env: this.continueEnv(operation) });
+    await this.git.exec([...SHOW_BASE, operation, '--continue'], { env: this.continueEnv(operation) });
   }
 
   async abortOperation(operation: Operation): Promise<void> {
@@ -682,7 +688,7 @@ export class GitOps {
   }
 
   async skipOperation(operation: Operation): Promise<void> {
-    await this.git.exec([operation, '--skip'], { env: this.continueEnv(operation) });
+    await this.git.exec([...SHOW_BASE, operation, '--skip'], { env: this.continueEnv(operation) });
   }
 
   // --- conflicts -------------------------------------------------------------
@@ -711,7 +717,7 @@ export class GitOps {
 
   /** Puts a resolved file back in conflict, with the markers, from git's record of the conflict. */
   async reopenConflict(file: string): Promise<void> {
-    await this.git.exec(['checkout', '-m', '--', file]);
+    await this.git.exec([...SHOW_BASE, 'checkout', '-m', '--', file]);
   }
 
   // --- stashes ---------------------------------------------------------------

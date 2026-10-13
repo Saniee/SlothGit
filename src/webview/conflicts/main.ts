@@ -110,22 +110,23 @@ function hunkView(file: string, hunk: ConflictHunk, index: number): HTMLElement 
     button('Keep Both', choose('both'), 'Current first, then incoming'),
   );
   const sides = element('div', 'sides');
-  for (const [side, lines] of [['current', hunk.current], ['incoming', hunk.incoming]] as const) {
+  const columns: ['before' | 'current' | 'incoming', string, string[]][] = [
+    ['current', 'Current', hunk.current],
+    ['incoming', 'Incoming', hunk.incoming],
+  ];
+  // Only when git wrote it (merge.conflictStyle diff3, which SlothGit's own operations use).
+  if (hunk.base) columns.unshift(['before', 'Before', hunk.base]);
+  for (const [side, label, lines] of columns) {
     const column = element('div', 'side');
-    column.append(element('span', `side-label ${side}`, side === 'current' ? 'Current' : 'Incoming'), code(lines));
+    column.append(element('span', `side-label ${side}`, label), code(lines, side === 'before' ? 'nothing (neither side had these lines)' : 'nothing (the lines were removed)'));
     sides.append(column);
   }
   view.append(head, sides);
-  if (hunk.base) {
-    const details = element('details');
-    details.append(element('summary', '', 'Before either change'), code(hunk.base));
-    view.append(details);
-  }
   return view;
 }
 
-function code(lines: string[]): HTMLPreElement {
-  return lines.length ? element('pre', '', lines.join('\n')) : element('pre', 'empty', 'nothing (the lines were removed)');
+function code(lines: string[], empty: string): HTMLPreElement {
+  return lines.length ? element('pre', '', lines.join('\n')) : element('pre', 'empty', empty);
 }
 
 function button(label: string, onClick: () => void, title?: string): HTMLButtonElement {

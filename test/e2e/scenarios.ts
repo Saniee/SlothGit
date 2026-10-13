@@ -267,7 +267,7 @@ scenario('rebase editor: from a commit, reorder, reword and run it in one go', a
 async function conflictsPanel(t: Context, files: string[]) {
   const panel = await waitFor('the conflicts panel', () => t.api.conflictsPanel());
   await waitFor(`the conflicts panel to show ${files.join(', ')}`, () => panel.rendered?.files.join(', ') === files.join(', ')).catch((e: Error) => {
-    throw new Error(`${e.message}; it shows ${JSON.stringify(panel.rendered)}, git status ${JSON.stringify(t.status())}`);
+    throw new Error(`${e.message}; it shows ${JSON.stringify(panel.rendered)}, git status ${JSON.stringify(t.status())}, unsaved ${JSON.stringify(vscode.workspace.textDocuments.filter((d) => d.isDirty).map((d) => d.getText()))}`);
   });
   return panel;
 }
@@ -304,7 +304,8 @@ scenario('conflicts panel: resolve a hunk, reopen, keep a side, then continue th
 
   await panel.openMergeEditor('app.txt');
   await waitFor('the merge editor', () => isMergeEditor(vscode.window.tabGroups.activeTabGroup.activeTab?.input));
-  await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+  // Revert: the merge editor can leave the file changed in memory, which the panel would (rightly) show.
+  await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
 
   await panel.resolveHunk('app.txt', 0, 'incoming', hunk);
   await conflictsPanel(t, ['app.txt: resolved']);
@@ -448,8 +449,13 @@ scenario('branch: move unpushed commits to a new branch', async (t) => {
 
 scenario('branch: rebasing pushed commits warns', async (t) => {
   await t.checkout('feature/login');
-  await t.run('slothgit.branch.rebase', [await t.localBranch('main')], [pick('Simple Rebase'), button('Rebase', /already pushed/)]);
+  await t.run('slothgit.branch.rebase', [await t.localBranch('main')], [
+    pick('Simple Rebase'),
+    button('Rebase', /already pushed/),
+    button('Force Push', /feature\/login was rewritten, but origin\/feature\/login still has the old commits/),
+  ]);
   assert.equal(t.rev('HEAD~3'), t.rev('main'));
+  await waitFor('the force push', () => t.rev('origin/feature/login') === t.rev('HEAD'));
 });
 
 scenario('branch: fast-forward a branch that is not checked out', async (t) => {
@@ -824,8 +830,15 @@ scenario('commit: rewording a pushed commit asks first', async (t) => {
   await t.run('slothgit.commit.reword', [await t.commit('Bump version')], [input('Bump version to 2'), dismiss(/already pushed/)]);
   assert.equal(t.rev('HEAD'), before, 'cancelled');
   await t.refresh();
-  await t.run('slothgit.commit.reword', [await t.commit('Bump version')], [input('Bump version to 2'), button('Rewrite History')]);
+  await t.run('slothgit.commit.reword', [await t.commit('Bump version')], [
+    input('Bump version to 2'),
+    button('Rewrite History'),
+    button('Later', /main was rewritten, but origin\/main still has the old commits/),
+  ]);
   assert.equal(t.subjects(4)[3], 'Bump version to 2');
+  await t.refresh();
+  await t.run('slothgit.commit.reword', [await t.commit('Bump version to 2')], [input('Bump version to 3')]);
+  assert.equal(t.subjects(4)[3], 'Bump version to 3', 'Later is not asked again for the same remote branch');
 });
 
 scenario('commit: the pushed-commit warning can be turned off', async (t) => {

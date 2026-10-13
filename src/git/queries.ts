@@ -181,6 +181,42 @@ export async function getUnpushed(git: Git): Promise<Set<string> | null> {
   return new Set(splitList(result.stdout, '\n').map((s) => s.trim()));
 }
 
+export interface RewrittenBranch {
+  branch: string;
+  /** "origin/main". */
+  upstream: string;
+  remote: string;
+  /** "refs/heads/main", the branch on the remote. */
+  remoteRef: string;
+  /** The upstream's tip, which the branch used to have before it was rewritten. */
+  upstreamSha: string;
+}
+
+/**
+ * The current branch when it was rewritten after it was pushed: it has diverged from its upstream, and the
+ * upstream's tip is a commit the branch itself pointed at before (it is in the branch's reflog). Pulling now would
+ * merge the old commits back in; a force push is what's needed. When the upstream's tip is not in the reflog,
+ * someone else pushed, and this returns undefined.
+ */
+export async function getRewrittenBranch(git: Git): Promise<RewrittenBranch | undefined> {
+  if (await getOperation(git)) return undefined;
+  const branch = (await git.exec(['symbolic-ref', '-q', '--short', 'HEAD'], { allowedExitCodes: [1] })).stdout.trim();
+  if (!branch) return undefined;
+  const counts = await git.exec(['rev-list', '--left-right', '--count', '@{upstream}...HEAD'], { allowedExitCodes: [128] });
+  const [behind, ahead] = counts.stdout.trim().split(/\s+/).map(Number);
+  if (counts.exitCode !== 0 || !behind || !ahead) return undefined;
+  const [upstream, upstreamSha, remote, remoteRef, reflog] = await Promise.all([
+    git.run(['rev-parse', '--abbrev-ref', '@{upstream}']),
+    git.run(['rev-parse', '@{upstream}']),
+    git.run(['config', `branch.${branch}.remote`]),
+    git.run(['config', `branch.${branch}.merge`]),
+    git.exec(['log', '-g', '-n200', '--format=%H', `refs/heads/${branch}`, '--'], { allowedExitCodes: [128] }),
+  ]);
+  const sha = upstreamSha.trim();
+  if (!reflog.stdout.split(/\r?\n/).includes(sha)) return undefined;
+  return { branch, upstream: upstream.trim(), remote: remote.trim(), remoteRef: remoteRef.trim(), upstreamSha: sha };
+}
+
 export async function getReflog(git: Git, limit: number): Promise<ReflogEntry[]> {
   const format = ['%H', '%h', '%gd', '%cr', '%P', '%gs'].join(US) + RS;
   const result = await git.exec(['reflog', 'show', `-n${limit}`, `--format=${format}`, 'HEAD', '--'], {

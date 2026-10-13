@@ -49,7 +49,7 @@
         "slothgit.confirmRewritingPushedCommits": {
           "type": "boolean",
           "default": true,
-          "description": "Ask for confirmation before rewriting commits that are already on the upstream branch."
+          "description": "Ask for confirmation before rewriting commits that are already on the upstream branch, and offer a force push afterwards."
         },
         "slothgit.mainBranches": {
           "type": "array",

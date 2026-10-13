@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
 import { GitOps, UserError, type ResetMode } from './git/operations';
 import { getConflicts } from './git/conflicts';
-import { getOperation, type Operation } from './git/queries';
+import { getOperation, getRewrittenBranch, type Operation } from './git/queries';
 import { branchNameError } from './git/refName';
 import { GitError } from './git/runner';
 import type { RepoManager } from './repoManager';
-import type { Repository } from './types/git';
+import { ForcePushMode, type Repository } from './types/git';
 
 const OPERATION_NAMES: Record<Operation, string> = {
   rebase: 'Rebase',
@@ -44,6 +44,8 @@ export function createRunner(
 ): Runner {
   let busy = false;
   let conflictHandler: ConflictHandler | undefined;
+  /** "branch upstreamSha" already offered a force push for, so Later isn't asked again after every operation. */
+  const offeredForcePush = new Set<string>();
 
   async function run(
     title: string,
@@ -75,11 +77,44 @@ export function createRunner(
     if (!failure) {
       if (info) void vscode.window.showInformationMessage(info);
       else vscode.window.setStatusBarMessage(`$(check) ${doneMessage(title)}`, DONE_MESSAGE_MS);
+      await offerForcePush(ops);
     }
     // Reported only now that this operation no longer counts as running: the conflict prompt's
     // Continue/Abort buttons start a new one.
     if (failure) await reportError(ops, failure.error, options);
     return !failure;
+  }
+
+  /**
+   * After a rewrite of pushed commits (including one finished by Continue), the upstream still has the old ones.
+   * VS Code's Sync Changes and Pull would merge them back in, so this offers the force push that's needed instead.
+   * Shown before the operation's run() returns, without waiting for the answer.
+   */
+  async function offerForcePush(ops: GitOps): Promise<void> {
+    if (!vscode.workspace.getConfiguration('slothgit').get('confirmRewritingPushedCommits', true)) return;
+    const rewritten = await getRewrittenBranch(ops.git).catch(() => undefined);
+    if (!rewritten) return;
+    const key = `${rewritten.branch} ${rewritten.upstreamSha}`;
+    if (offeredForcePush.has(key)) return;
+    offeredForcePush.add(key);
+    // Not awaited: the operation is done, only the question stays open.
+    void Promise.resolve(
+      vscode.window.showInformationMessage(
+        `${rewritten.branch} was rewritten, but ${rewritten.upstream} still has the old commits. Force push to replace them? ` +
+          `Pulling (or Sync Changes) would merge the old commits back in.`,
+        'Force Push',
+        'Later',
+      ),
+    ).then(async (choice) => {
+      if (choice !== 'Force Push') return;
+      // No second confirmation: everything on the remote branch was on this one before the rewrite, and the
+      // lease refuses if someone pushed since.
+      const { branch, remote, remoteRef, upstream } = rewritten;
+      await run(`Force pushing ${branch}…`, async (_ops, repo) => {
+        await repo.push(remote, `refs/heads/${branch}:${remoteRef}`, false, ForcePushMode.ForceWithLease);
+        return `Pushed ${branch} to ${upstream}.`;
+      });
+    });
   }
 
   async function reportError(ops: GitOps, error: unknown, options: RunOptions): Promise<void> {

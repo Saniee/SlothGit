@@ -16,6 +16,7 @@ h1 { margin: 0 0 4px; font-size: 1.15em; font-weight: 600; }
 .legend dt, .side-label { padding: 0 6px; border-radius: 3px; color: var(--vscode-foreground); font-weight: 600; }
 .current { background: var(--current); }
 .incoming { background: var(--incoming); }
+.before { background: var(--vscode-badge-background); }
 
 .files { flex: 1; overflow-y: auto; padding: 8px 16px; }
 .file { margin-bottom: 12px; border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35)); border-radius: 4px; }
@@ -38,8 +39,6 @@ pre {
   background: var(--vscode-textCodeBlock-background, rgba(128, 128, 128, 0.1));
 }
 pre.empty { font-style: italic; color: var(--vscode-descriptionForeground); font-family: inherit; }
-details { margin-top: 6px; color: var(--vscode-descriptionForeground); }
-details pre { margin-top: 4px; }
 .note { padding: 6px 10px 10px; color: var(--vscode-descriptionForeground); }
 
 button {

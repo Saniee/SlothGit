@@ -98,6 +98,16 @@ describe('conflicts', { concurrency }, () => {
     );
   });
 
+  test("SlothGit's own merges write the lines from before either change, also when a conflict is reopened", async () => {
+    const r = setup();
+    await r.ops.merge('side', 'default').catch(() => undefined);
+    const [hunk] = parseConflicts(r.read('f.txt'));
+    assert.deepEqual(hunk, { line: 1, current: ['MAIN'], base: ['b'], incoming: ['SIDE'] });
+    await r.ops.takeSide('f.txt', 'current');
+    await r.ops.reopenConflict('f.txt');
+    assert.deepEqual(parseConflicts(r.read('f.txt'))[0].base, ['b']);
+  });
+
   test('take a side, mark resolved, reopen', async () => {
     const r = setup();
     r.sh('merge', 'side');

@@ -12,6 +12,7 @@ import {
   getRebaseTodo,
   getRemoteBranches,
   getRemotes,
+  getRewrittenBranch,
   getTags,
   parseTrack,
   reachableFrom,
@@ -200,6 +201,34 @@ describe('branches', { concurrency }, () => {
     assert.equal(await r.ops.countPushedCommitsAfter('HEAD~1'), 0);
     r.sh('switch', '-q', '-c', 'no-upstream');
     assert.equal(await r.ops.countPushedCommitsAfter('main'), 0);
+  });
+
+  test('a branch rewritten after it was pushed is told apart from one someone else pushed to', async () => {
+    const r = setup();
+    const bare = withOrigin(r);
+    r.commit('a.txt', 'two\n', 'c2');
+    r.sh('push', '-q');
+    assert.equal(await getRewrittenBranch(r.git), undefined, 'up to date');
+    r.sh('commit', '-q', '--amend', '-m', 'c2 reworded');
+    assert.deepEqual(await getRewrittenBranch(r.git), {
+      branch: 'main',
+      upstream: 'origin/main',
+      remote: 'origin',
+      remoteRef: 'refs/heads/main',
+      upstreamSha: r.sh('rev-parse', 'origin/main'),
+    });
+
+    // Someone else pushes on top of the old commits: diverged, but pulling is right, not a force push.
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), 'slothgit-other-'));
+    git(other, 'clone', '-q', bare, '.');
+    git(other, 'config', 'user.name', 'O');
+    git(other, 'config', 'user.email', 'o@example.com');
+    fs.writeFileSync(path.join(other, 'o.txt'), 'o\n');
+    git(other, 'add', '.');
+    git(other, 'commit', '-q', '-m', 'from other');
+    git(other, 'push', '-q');
+    r.sh('fetch', '-q', 'origin');
+    assert.equal(await getRewrittenBranch(r.git), undefined);
   });
 
   test('upstream set/unset and fast-forward of the current branch', async () => {

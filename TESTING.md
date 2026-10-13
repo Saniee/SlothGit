@@ -48,7 +48,7 @@ Ticked items are tested and working in 1.0.0. If you find something odd, such as
 - [x] Rebase onto, plain and with a marked base; onto a branch already contained says there is nothing to rebase
 - [x] Interactive rebase onto, plain and with a marked base: opens the rebase editor; **Plan in Commits View** pauses first instead, change / reorder steps, Continue or Abort
 - [x] Rebase editor (Interactive Rebase from Here… on a commit, or from the branch rebase picker): drag or Alt+↑ / Alt+↓ to reorder, pick / reword (message box) / edit / squash / fixup / drop; conflicts are marked before starting; Start Rebase runs the plan, and a conflict stops it with Continue / Abort; a merge among the commits is refused
-- [x] Conflicts panel (Resolve Conflicts in the prompt, operation menu or title bars; opens by itself from the rebase editor): current and incoming per conflict, Keep Current / Incoming / Both, keep a side for a whole file (also delete/modify conflicts), Merge Editor, Reopen a resolved file, Mark Resolved; Continue moves on to the next stop, Skip and Abort; the panel closes when the operation is done
+- [x] Conflicts panel (Resolve Conflicts in the prompt, operation menu or title bars; opens by itself from the rebase editor): before, current and incoming per conflict, Keep Current / Incoming / Both, keep a side for a whole file (also delete/modify conflicts), Merge Editor, Reopen a resolved file, Mark Resolved; Continue moves on to the next stop, Skip and Abort; the panel closes when the operation is done
 - [x] Fast-forward, set / unset upstream, set remote branch as upstream
 - [x] Push, force push with lease, fetch, fetch all
 - [x] Compare with current, reset current to this, copy name
@@ -86,7 +86,7 @@ Ticked items are tested and working in 1.0.0. If you find something odd, such as
 - [x] Right-click menus on a commit, a branch and in the Commit Graph: More Rewrite Actions, Bisect and Upstream submenus hold the moved items; nothing appears where it can't run
 - [x] A slow action (push to a slow remote, a long rebase) shows a status-bar spinner and, after ~1.5 s, a notification; quick actions flash "…: done" in the status bar
 - [x] Sync view: branch, upstream and ↑↓ counts follow commits, pushes and checkouts; Pull, Push and Publish Branch; the ⌄ quick picks and right-click menus: Pull (Rebase), Fetch, Fetch All, Force Push, Push to Another Branch, Set Upstream
-- [x] Rewriting pushed commits asks first (setting `slothgit.confirmRewritingPushedCommits`)
+- [x] Rewriting pushed commits asks first (setting `slothgit.confirmRewritingPushedCommits`), and afterwards offers a force push once (Later is not asked again for the same remote branch); not when someone else pushed
 - [x] Views refresh after you commit or switch branches outside SlothGit
 - [x] Multi-root workspace / several repositories: Switch Repository
 - [x] Simple Mode: the eye button on the Changes title bar toggles it; advanced actions and the Worktrees section are hidden

@@ -14,10 +14,10 @@ Open **Get Started with SlothGit** on VS Code's Welcome page, or **Learn Git Con
 - **Branches:** local branches (current first, then most recently used) with ahead/behind counts, remotes, tags and worktrees in one tree. Checkout, merge, rebase (whole branch, from a marked base, or interactive), fast-forward without checking out, push / force push with lease, upstreams, pull requests, delete merged branches, and moving commits made on the wrong branch to a new one.
 - **Commits:** rewrite history from the commit list: squash, fixup, drop, reword, edit, move up / down, amend staged changes into an older commit, fixup commits and autosquash, amend author and co-authors, cherry-pick, revert, reset. Works across merge commits (`--rebase-merges`) and can move stacked branches along (`slothgit.updateStackedBranches`).
 - **Rebase editor:** **Interactive Rebase from Here…** on a commit, or **Interactive Rebase** when rebasing onto a branch, lists the commits in an editor tab. Drag them to reorder, pick, reword, edit, squash, fixup or drop each, and see which ones are likely to conflict before you start. Start Rebase runs the whole plan at once.
-- **Conflicts panel:** when a rebase, merge, cherry-pick or revert stops on conflicts, **Resolve Conflicts** lists every conflicted file in one tab, with current and incoming side by side: keep either or both per conflict or per file, open the merge editor, then Continue, Skip or Abort.
+- **Conflicts panel:** when a rebase, merge, cherry-pick or revert stops on conflicts, **Resolve Conflicts** lists every conflicted file in one tab, with current and incoming side by side, next to the lines as they were before either change: keep either or both per conflict or per file, open the merge editor, then Continue, Skip or Abort.
 - **Patches:** remove or move a file's changes, or selected lines in a commit's diff, out of a commit, to the index or a new commit. Collect several into a custom patch (status bar) and move it into any other commit.
 - **Paused rebases:** the remaining steps are listed at the top of the Commits view. Right-click to change them (pick, reword, squash, fixup, edit, drop), reorder with ↑ / ↓, then Continue, Skip or Abort from the title bar or status bar.
-- **Commit colours** as in lazygit: green when on the main branch (`slothgit.mainBranches`), yellow when pushed, red when not. Rewriting pushed commits asks first.
+- **Commit colours** as in lazygit: green when on the main branch (`slothgit.mainBranches`), yellow when pushed, red when not. Rewriting pushed commits asks first, and afterwards offers the force push that replaces the old commits on the remote (pulling would merge them back in).
 - **Commit Graph:** history as a graph in an editor tab, with branch lanes, labels, search, details and the same right-click actions.
 - **Search, filter by file, all branches, bisect and compare** in the Commits view.
 - **Stashes:** apply, pop, drop, rename, branch from a stash; stash untracked or only staged changes.
@@ -33,7 +33,7 @@ The Commits view covers what VS Code's built-in **Graph** view does, so SlothGit
 | `slothgit.simpleMode` | `false` | Hide advanced actions from the menus |
 | `slothgit.branchSort` | `recency` | Order of local branches: `recency`, `date` or `name` |
 | `slothgit.mainBranches` | `main`, `master` | Branches whose commits are shown green |
-| `slothgit.confirmRewritingPushedCommits` | `true` | Ask before rewriting pushed commits |
+| `slothgit.confirmRewritingPushedCommits` | `true` | Ask before rewriting pushed commits, and offer a force push after |
 | `slothgit.updateStackedBranches` | `gitConfig` | Move stacked branches along when rewriting (`always`, `never`, or git's `rebase.updateRefs`) |
 | `slothgit.commitLimit` / `slothgit.reflogLimit` | `300` / `200` | How many entries the views load |
 
